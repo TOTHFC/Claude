@@ -1,0 +1,287 @@
+{
+ "nar": [
+  {
+   "name": "Nana",
+   "voice_id": "tc_6076e25ac80469168e3771cf",
+   "gender": "female",
+   "age": "young_adult",
+   "use_cases": [
+    "Game",
+    "Anime"
+   ]
+  },
+  {
+   "name": "Hamchu",
+   "voice_id": "tc_632293ed2f894f2211e8c597",
+   "gender": "female",
+   "age": "young_adult",
+   "use_cases": [
+    "Anime"
+   ]
+  },
+  {
+   "name": "Lala",
+   "voice_id": "tc_61f084d860b9b6b40388f868",
+   "gender": "female",
+   "age": "young_adult",
+   "use_cases": [
+    "TikTok/Reels/Shorts"
+   ]
+  },
+  {
+   "name": "Luna",
+   "voice_id": "tc_609b98c2e587f6dbd19414b9",
+   "gender": "female",
+   "age": "young_adult",
+   "use_cases": [
+    "Radio/Podcast",
+    "Game"
+   ]
+  }
+ ],
+ "dz": [
+  {
+   "name": "Jungbong",
+   "voice_id": "tc_636b1d81b58379d5c6b6aeeb",
+   "gender": "male",
+   "age": "middle_age",
+   "use_cases": [
+    "Conversational"
+   ]
+  },
+  {
+   "name": "Taebaek",
+   "voice_id": "tc_606c6c155e38f609c6789d2b",
+   "gender": "male",
+   "age": "middle_age",
+   "use_cases": [
+    "Conversational"
+   ]
+  },
+  {
+   "name": "Dupil",
+   "voice_id": "tc_606c6c684085209e5555abb0",
+   "gender": "male",
+   "age": "middle_age",
+   "use_cases": [
+    "Conversational"
+   ]
+  },
+  {
+   "name": "Daegil",
+   "voice_id": "tc_628d9dac4b8771d984874644",
+   "gender": "male",
+   "age": "middle_age",
+   "use_cases": [
+    "Documentary",
+    "News Reporter"
+   ]
+  }
+ ],
+ "koko": [
+  {
+   "name": "Pangpang",
+   "voice_id": "tc_61532cab9119555d352f5c69",
+   "gender": "male",
+   "age": "child",
+   "use_cases": [
+    "Anime"
+   ]
+  },
+  {
+   "name": "Hobin",
+   "voice_id": "tc_5ffda49bcba8f6d3d46fc447",
+   "gender": "male",
+   "age": "child",
+   "use_cases": [
+    "Anime"
+   ]
+  },
+  {
+   "name": "Moru",
+   "voice_id": "tc_619d7eb59233f1f0771197ed",
+   "gender": "male",
+   "age": "child",
+   "use_cases": [
+    "Game",
+    "Anime"
+   ]
+  }
+ ],
+ "kids": [
+  {
+   "name": "Beri",
+   "voice_id": "tc_619d7f42c14fccfc4953e159",
+   "gender": "female",
+   "age": "child",
+   "use_cases": [
+    "Game",
+    "Anime"
+   ]
+  },
+  {
+   "name": "Bono",
+   "voice_id": "tc_5c547544fcfee90007fed454",
+   "gender": "female",
+   "age": "child",
+   "use_cases": [
+    "Anime"
+   ]
+  },
+  {
+   "name": "Ruri",
+   "voice_id": "tc_65a8c82a7e7bded32947497e",
+   "gender": "female",
+   "age": "child",
+   "use_cases": [
+    "Anime"
+   ]
+  },
+  {
+   "name": "Hajun",
+   "voice_id": "tc_60db308484130840f23e6ca0",
+   "gender": "male",
+   "age": "child",
+   "use_cases": [
+    "Conversational",
+    "Game",
+    "Anime"
+   ]
+  },
+  {
+   "name": "Gunwoo",
+   "voice_id": "tc_624cccbcadcd568510764d65",
+   "gender": "male",
+   "age": "child",
+   "use_cases": [
+    "Conversational",
+    "Game",
+    "Anime"
+   ]
+  }
+ ],
+ "kane": [
+  {
+   "name": "Sewoo",
+   "voice_id": "tc_67d2346b8572120c4aa63e33",
+   "gender": "male",
+   "age": "young_adult",
+   "use_cases": [
+    "Game",
+    "Anime"
+   ]
+  },
+  {
+   "name": "Monggun",
+   "voice_id": "tc_6731b32e075b04a9446441a0",
+   "gender": "male",
+   "age": "young_adult",
+   "use_cases": [
+    "Anime",
+    "Game",
+    "Conversational"
+   ]
+  },
+  {
+   "name": "Doyoon",
+   "voice_id": "tc_6a3350f8e5a50a4abe948fa8",
+   "gender": "male",
+   "age": "young_adult",
+   "use_cases": [
+    "Conversational",
+    "TikTok/Reels/Shorts"
+   ]
+  }
+ ],
+ "son": [
+  {
+   "name": "Guri",
+   "voice_id": "tc_6359e7ea258d1b6dc3abe6e6",
+   "gender": "male",
+   "age": "young_adult",
+   "use_cases": [
+    "Anime"
+   ]
+  },
+  {
+   "name": "Seojoon",
+   "voice_id": "tc_63aaec04428dd87af3757d72",
+   "gender": "male",
+   "age": "young_adult",
+   "use_cases": [
+    "Conversational"
+   ]
+  },
+  {
+   "name": "Wonwoo",
+   "voice_id": "tc_686dc43ebd6351e06ee64d74",
+   "gender": "male",
+   "age": "young_adult",
+   "use_cases": [
+    "Conversational",
+    "Radio/Podcast"
+   ]
+  }
+ ],
+ "villain": [
+  {
+   "name": "Koombo",
+   "voice_id": "tc_6426f7dc0084e83b73bf625a",
+   "gender": "male",
+   "age": "young_adult",
+   "use_cases": [
+    "Game",
+    "Anime"
+   ]
+  },
+  {
+   "name": "Jongdae",
+   "voice_id": "tc_67e38d8c771b5511659c4534",
+   "gender": "male",
+   "age": "elder",
+   "use_cases": [
+    "Documentary",
+    "Anime",
+    "Game"
+   ]
+  },
+  {
+   "name": "Hades",
+   "voice_id": "tc_6a867e6bd49b8f6a07db59da",
+   "gender": "male",
+   "age": "middle_age",
+   "use_cases": [
+    "Game"
+   ]
+  }
+ ],
+ "fan": [
+  {
+   "name": "Chan-gu",
+   "voice_id": "tc_5c547544fcfee90007fed455",
+   "gender": "male",
+   "age": "young_adult",
+   "use_cases": [
+    "Game"
+   ]
+  },
+  {
+   "name": "Buttaguy",
+   "voice_id": "tc_6063252471850cc8f04c7600",
+   "gender": "male",
+   "age": "young_adult",
+   "use_cases": [
+    "Conversational"
+   ]
+  },
+  {
+   "name": "Jabbaba",
+   "voice_id": "tc_62a89753894c1004cb577d04",
+   "gender": "male",
+   "age": "young_adult",
+   "use_cases": [
+    "TikTok/Reels/Shorts"
+   ]
+  }
+ ]
+}

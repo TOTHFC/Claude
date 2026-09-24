@@ -126,11 +126,12 @@ class Scene:
         self.setup()
 
     def say(self, t, lid, who=None, marks=False):
-        role, txt = LINES[lid]
+        role, txt, *rest = LINES[lid]
+        emo = rest[0] if rest else None
         if marks:
-            a, mk = tts_marks(txt, role)
+            a, mk = tts_marks(txt, role, emo)
         else:
-            a, mk = tts(txt, role), None
+            a, mk = tts(txt, role, emotion=emo), None
         self.lines.append(dict(t=t, id=lid, role=role, who=who or role, a=a, env=envelope(a, FPS), txt=txt,
                                end=t + len(a) / SR, marks=mk))
         return t + len(a) / SR

@@ -47,6 +47,30 @@
 
 ENIC은 비난하지 않았습니다. 선수를 사 준 사람은 "이장님"으로만 나옵니다.
 
+## 타입캐스트 음성으로 바꾸기
+
+환경 변수 `TYPECAST_API_KEY`가 있으면 대사를 타입캐스트 캐릭터 음성(ssfm-v30, 감정 프리셋)으로 만듭니다.
+키가 없으면 지금처럼 edge-tts로 만듭니다. 키는 채팅이 아니라 클라우드 환경 설정의 API credentials(또는 환경 변수)에 넣어야 하고, 새 세션부터 적용됩니다.
+
+```bash
+python3 audition_typecast.py   # 배역별 후보 목소리를 _audition/ 에 저장하고 발음 인식 결과·음높이 출력
+python3 make_kids.py           # 대사를 타입캐스트로 새로 합성해 렌더링(결과는 voice_cache/ 에 저장)
+```
+
+| 배역 | 기본 목소리 | 후보 |
+|---|---|---|
+| 해설 | Nana | Hamchu, Lala, Luna |
+| 데 제르비 | Jungbong | Taebaek, Dupil, Daegil |
+| 꼬꼬 | Pangpang | Hobin, Moru |
+| 어린이들(3명 합창) | Beri + Bono + Hajun | Ruri, Gunwoo |
+| 케인 | Sewoo | Monggun, Doyoon |
+| 쏘니 | Guri | Seojoon, Wonwoo |
+| 악당 | Koombo | Jongdae, Hades |
+| 마을 사람들 | Chan-gu | Buttaguy, Jabbaba |
+
+목소리는 `voice.py`의 `CAST`에서, 대사별 감정은 `script.py`의 세 번째 값에서 바꿉니다.
+단어 타이밍이 필요한 대사는 음성 인식(faster-whisper)으로 단어 시각을 구해 저장합니다.
+
 ## 만들기
 
 ```bash
