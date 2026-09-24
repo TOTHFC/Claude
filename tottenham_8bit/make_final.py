@@ -25,6 +25,7 @@ from sprites import (COCK, COCK_CRY, COCK_RUN, NEON, OBSIDIAN, PEOPLE, chibi, dr
                      portrait)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+PEOPLE["adarabioyo"].update(name="토신", short="토신")
 OUT = os.path.join(HERE, "tottenham_final.mp4")
 STAMP_SACKED = make_stamp("경질!")
 SELECT_SONG = ("A4 C5 E5 C5 A4 C5 E5 C5 G4 B4 D5 B4 G4 B4 D5 B4 F4 A4 C5 A4 F4 A4 C5 A4 E4 G#4 B4 G#4 E4 G#4 B4 E5",
@@ -125,7 +126,7 @@ class Boot(Scene):
 # ------------------------------------------------------------------ 1. 타이틀
 
 class Title(Scene):
-    dur = 10.0
+    dur = 9.0
     LINE = [("fernandes", "home"), ("tonali", "away"), ("vdv", "home"), ("gallagher", "away"),
             ("vanhecke", "home"), ("mudryk", "away")]
     XS = [22, 82, 142, 290, 350, 410]
@@ -133,7 +134,7 @@ class Title(Scene):
     CURSOR = [(0.0, 0), (3.0, 1), (5.6, 0), (6.1, 1), (8.0, 0)]
     POP1 = (3.4, 5.6)
     POP2 = (6.4, 7.8)
-    START = 8.5
+    START = 8.2
 
     def cur(self, t):
         return [c for tt, c in self.CURSOR if t >= tt][-1]
@@ -262,7 +263,7 @@ class ManagerSelect(Scene):
 # ------------------------------------------------------------------ 5. 플랫포머 (2025-26)
 
 class Platformer(Scene):
-    dur = 19.6
+    dur = 16.6
     INTRO = 2.0
     SPD = 70.0
     CAM_STOP = 10.4
@@ -278,7 +279,7 @@ class Platformer(Scene):
     PAUSES = [(4.5, 5.8), (8.1, 9.4)]
     WALK, JUMP, LAND = 10.4, 11.2, 12.1
     HAMMER = 12.5
-    ARSENAL = 16.6
+    ARSENAL = 99.0
 
     def __init__(self):
         cf = self.cam(self.CAM_STOP)
@@ -510,30 +511,26 @@ class Platformer(Scene):
 
 class Shop(Scene):
     ITEMS = [  # (키, 등번호, 이름, 가격, 구매 시각)
-        ("fernandes", "18", "페르난데스", "£85M", 2.0),
-        ("tonali", "16", "토날리", "£92.5M", 4.6),
-        (None, "17", "사비뉴", "£75M", 6.8),
-        ("vanhecke", "6", "반 헤케", "£52M", 7.6),
-        ("robertson", "3", "로버트슨", "무료", 9.2),
-        ("senesi", "5", "세네시", "무료", 9.9),
-        ("mudryk", "27", "무드릭", "임대", 11.4),
-        (None, "22", "마르무시", "임대", 12.1),
-        ("adarabioyo", "4", "아다라비오요", "영입", 13.6),
+        ("fernandes", "18", "페르난데스", "£85M", 1.8),
+        ("tonali", "16", "토날리", "£92.5M", 4.2),
+        (None, "17", "사비뉴", "£75M", 6.4),
+        ("vanhecke", "6", "반 헤케", "£52M", 6.9),
+        ("robertson", "3", "로버트슨", "무료", 8.6),
+        ("senesi", "5", "세네시", "무료", 9.0),
+        ("mudryk", "27", "무드릭", "임대", 9.4),
+        (None, "22", "마르무시", "임대", 9.8),
+        ("adarabioyo", "4", "토신", "영입", 10.2),
     ]
     LINES = [
-        (0.3, ["어서 오시오, 수탉 손님!", "뭘 사겠소?"], WHITE),
-        (2.0, ["페르난데스 £85M!", "강등팀 출신인데 구단 신기록이오!"], GOLD),
-        (4.6, ["토날리 £92.5M!", "뉴캐슬에서 모셔 왔소!"], GOLD),
-        (6.8, ["사비뉴 £75M, 반 헤케 £52M도", "얹어 드리지!"], GOLD),
-        (9.2, ["로버트슨·세네시는", "공짜요, 공짜!"], WHITE),
-        (11.4, ["무드릭·마르무시는", "빌려 드리지!"], WHITE),
-        (13.6, ["아다라비오요까지!", "오늘 장사 끝!"], WHITE),
-        (15.4, ["아, 그 사이 주장 로메로는", "아틀레티코로 떠났소."], LGRAY),
-        (18.0, ["이 정도면 우승이지!", "하하하!"], GOLD),
+        (0.2, ["어서 오시오, 수탉 손님!", "뭘 사겠소?"], WHITE),
+        (1.8, ["페르난데스 £85M!", "강등팀 출신인데 구단 신기록이오!"], GOLD),
+        (4.2, ["토날리 £92.5M!", "뉴캐슬에서 모셔 왔소!"], GOLD),
+        (6.4, ["사비뉴 £75M, 반 헤케 £52M도", "얹어 드리지!"], GOLD),
+        (8.6, ["로버트슨·세네시는 공짜, 무드릭·마르무시는 임대,", "토신까지! 오늘 장사 끝!"], WHITE),
+        (11.2, ["아, 그 사이 주장 로메로는", "아틀레티코로 떠났소."], LGRAY),
     ]
-    KITS, SQUAD, SPOIL = 20.4, 23.4, 26.2
-    dur = 28.4
-
+    KITS, SQUAD, SPOIL = 13.4, 15.6, 17.4
+    dur = 19.0
     def draw(self, img, d, t):
         if t >= self.KITS:
             return self.draw_after(img, d, t)
@@ -630,40 +627,33 @@ class Shop(Scene):
 
 class Battle(Scene):
     fade_in = 0.0
-    B0 = 1.0
+    B0 = 0.8
     FOES = [
-        dict(kind="bee", name="브렌트포드", player="fernandes", kit="away", len=5.2,
-             msgs=[(0.2, ["야생의 브렌트포드가 나타났다! (원정)"], BLACK),
-                   (1.5, ["토트넘은 £85M 페르난데스를 내보냈다!"], BLACK),
-                   (2.9, ["벌떼의 쏘기 공격!", "효과는 굉장했다... 0-3 패배!"], RED)],
-             result=(3.3, "패", 0, "브렌트포드 3 : 0 토트넘"), dmg=[3.3]),
-        dict(kind="magpie", name="뉴캐슬", player="tonali", kit="home", len=5.3,
-             msgs=[(0.2, ["뉴캐슬이 나타났다!", "(토날리의 친정팀이다)"], BLACK),
-                   (1.6, ["토날리: 친정팀아 안녕~!"], BLACK),
-                   (2.9, ["뉴캐슬은 토날리 이적료로 배가 부르다!", "0-2 패배!"], RED)],
-             result=(3.4, "패", 0, "토트넘 0 : 2 뉴캐슬"), dmg=[3.4]),
-        dict(kind="tree", name="노팅엄 포레스트", player="gallagher", kit="away", len=5.3,
-             msgs=[(0.2, ["노팅엄 포레스트가 나타났다! (원정)", "(지난 시즌 투도르를 잘랐던 그 나무)"], BLACK),
-                   (1.8, ["갤러거의 슈팅! 나무에 맞았다.", "또 맞았다. 또..."], BLACK),
-                   (3.1, ["0-0 무승부! 시즌 첫 승점!"], BLACK)],
-             result=(3.4, "무", 1, "포레스트 0 : 0 토트넘"), heal=3.4),
-        dict(kind="toffee", name="에버튼", player="vanhecke", kit="home", len=5.1,
-             msgs=[(0.2, ["에버튼이 나타났다!"], BLACK),
-                   (1.4, ["에버튼은 잠자기를 썼다!", "토트넘도 잠자기를 썼다!"], BLACK),
-                   (2.9, ["0-0 무승부. 승점 +1 (쿨쿨...)"], BLACK)],
-             result=(3.2, "무", 1, "토트넘 0 : 0 에버튼"), heal=3.2),
-        dict(kind="lion", name="아스톤 빌라", player="robertson", kit="home", len=9.2,
-             msgs=[(0.2, ["아스톤 빌라가 나타났다!"], BLACK),
-                   (1.4, ["로버트슨의 어설픈 걷어내기!", "빌라가 선제골을 넣었다!"], BLACK),
-                   (3.0, ["...0-3까지 끌려갔다."], RED),
-                   (4.3, ["돌아와, 로버트슨! 가라, 갤러거!"], BLACK),
-                   (5.5, ["86분 갤러거 첫 골! 추가시간 반 헤케 골!", "희망이 차오른다!!"], BLACK),
-                   (7.3, ["...하지만 희망은 효과가 없었다.", "2-3 패배!"], RED)],
-             result=(7.7, "패", 0, "토트넘 2 : 3 아스톤 빌라"), dmg=[1.9, 3.2, 7.7], hits=[5.8, 6.4],
-             swap=(4.6, "gallagher")),
+        dict(kind="bee", name="브렌트포드", player="fernandes", kit="away", len=5.0,
+             msgs=[(0.2, ["야생의 브렌트포드가 나타났다! (원정)", "토트넘은 £85M 페르난데스를 내보냈다!"], BLACK),
+                   (2.7, ["벌떼의 쏘기 공격! 효과는 굉장했다...", "0-3 패배!"], RED)],
+             result=(3.0, "패", 0, "브렌트포드 3 : 0 토트넘"), dmg=[3.0]),
+        dict(kind="magpie", name="뉴캐슬", player="tonali", kit="home", len=5.0,
+             msgs=[(0.2, ["뉴캐슬이 나타났다! (토날리의 친정팀)", "토날리: 친정팀아 안녕~!"], BLACK),
+                   (2.7, ["뉴캐슬은 토날리 이적료로 배가 부르다!", "0-2 패배!"], RED)],
+             result=(3.0, "패", 0, "토트넘 0 : 2 뉴캐슬"), dmg=[3.0]),
+        dict(kind="tree", name="노팅엄 포레스트", player="gallagher", kit="away", len=5.2,
+             msgs=[(0.2, ["포레스트가 나타났다! (투도르를 자른 그 나무)", "갤러거의 슈팅! 나무에 맞았다. 또 맞았다."], BLACK),
+                   (2.7, ["0-0 무승부! 시즌 첫 승점!"], BLACK)],
+             result=(2.9, "무", 1, "포레스트 0 : 0 토트넘"), heal=2.9),
+        dict(kind="toffee", name="에버튼", player="vanhecke", kit="home", len=5.2,
+             msgs=[(0.2, ["에버튼은 잠자기를 썼다!", "토트넘도 잠자기를 썼다!"], BLACK),
+                   (2.7, ["0-0 무승부. 승점 +1 (쿨쿨...)"], BLACK)],
+             result=(2.9, "무", 1, "토트넘 0 : 0 에버튼"), heal=2.9),
+        dict(kind="lion", name="아스톤 빌라", player="robertson", kit="home", len=8.6,
+             msgs=[(0.2, ["아스톤 빌라가 나타났다!", "로버트슨의 실수... 0-3까지 끌려갔다!"], RED),
+                   (2.8, ["돌아와, 로버트슨! 가라, 갤러거!", "갤러거·반 헤케 연속골! 희망이 차오른다!!"], BLACK),
+                   (5.8, ["...하지만 희망은 효과가 없었다.", "2-3 패배!"], RED)],
+             result=(6.1, "패", 0, "토트넘 2 : 3 아스톤 빌라"), dmg=[1.0, 6.1], hits=[4.0, 4.4],
+             swap=(2.9, "gallagher")),
     ]
     MOODS = ["smile", "neutral", "sweat", "sweat", "sweat", "shock"]
-    OUTRO = 4.4
+    OUTRO = 3.8
 
     def __init__(self):
         self.starts = []
@@ -722,10 +712,10 @@ class Battle(Scene):
                 board = f["result"][3]
         else:
             lt2 = t - self.end
-            if lt2 < 1.6:
+            if lt2 < 1.4:
                 msg = (["토트넘은 눈앞이 캄캄해졌다..."], lt2 - 0.1, BLACK)
             else:
-                msg = (["5경기 승점 2 · 2득점 8실점", "리그 20위 (꼴찌)"], lt2 - 1.6, RED)
+                msg = (["5경기 승점 2 · 2득점 8실점", "리그 20위 (꼴찌)"], lt2 - 1.4, RED)
         hurt = t < self.end and any(0 <= lt - dt < 0.6 for dt in f.get("dmg", []))
         blit(img, chibi(player, kit=f["kit"]), 106, 128, 2)
         if not (hurt and int(t * 16) % 2):
@@ -784,7 +774,7 @@ class Battle(Scene):
                 m.sfx(t0 + s + f["swap"][0], "poof")
         m.sfx(t0 + self.end + 0.1, "blackout")
         blip_lines(m, t0 + self.end + 0.1, ["토트넘은 눈앞이 캄캄해졌다..."])
-        blip_lines(m, t0 + self.end + 1.6, ["5경기 승점 2 · 2득점 8실점", "리그 20위 (꼴찌)"])
+        blip_lines(m, t0 + self.end + 1.4, ["5경기 승점 2 · 2득점 8실점", "리그 20위 (꼴찌)"])
 
 
 # ------------------------------------------------------------------ 9. 테트리스
@@ -858,7 +848,7 @@ class Tetris(Scene):
 # ------------------------------------------------------------------ 10. 팬 시위
 
 class Protest(Scene):
-    dur = 10.0
+    dur = 7.4
     B1 = "£300M 쓰고 20위?! ★ "
     B2 = "바뀐 건 유니폼뿐! ★ "
 
@@ -891,31 +881,31 @@ class Protest(Scene):
             pow_box(d, "정신 차려!!", 240, 108, YELLOW, RED, F16)
         box(d, 6, 196, 474, 266)
         text(d, 18, 202, "분노 게이지", WHITE)
-        k = min(1.0, max(0.0, (t - 0.8) / 4.0))
+        k = min(1.0, max(0.0, (t - 0.5) / 2.5))
         d.rectangle([110, 207, 380, 219], fill=BLACK, outline=WHITE)
         d.rectangle([112, 209, 112 + int(266 * k), 217], fill=RED if k > 0.7 else ORANGE)
         if k >= 1.0 and blink(t, 3):
             text(d, 392, 204, "최대!!", RED)
-        if t > 5.0:
-            text(d, 18, 226, reveal("팬들: \"이번 시즌은 다르다며!!\"", t - 5.0), GOLD)
-        if t > 7.4:
-            text(d, 18, 248, reveal("수탉: ...(할 말 없음)", t - 7.4), WHITE)
+        if t > 3.0:
+            text(d, 18, 226, reveal("팬들: \"이번 시즌은 다르다며!!\"", t - 3.0), GOLD)
+        if t > 5.2:
+            text(d, 18, 248, reveal("수탉: ...(할 말 없음)", t - 5.2), WHITE)
 
     def audio(self, m, t0):
-        play(m, t0 + 0.2, 9.6, ANGRY, 140, drums="k . k s", duty=0.5, vol=0.06)
-        crowd = noise(9.8, 0.04, None, hold=1)
+        play(m, t0 + 0.2, 7.0, ANGRY, 140, drums="k . k s", duty=0.5, vol=0.06)
+        crowd = noise(7.8, 0.04, None, hold=1)
         crowd = np.convolve(crowd, np.ones(20) / 20, mode="same") * 3
         m.add(t0 + 0.1, crowd)
-        for k in range(8):
+        for k in range(6):
             m.sfx(t0 + 0.4 + k * 1.1, "boo")
-        m.blips(t0 + 5.0, "팬들: 이번 시즌은 다르다며!!")
-        m.blips(t0 + 7.4, "수탉: (할 말 없음)")
+        m.blips(t0 + 3.0, "팬들: 이번 시즌은 다르다며!!")
+        m.blips(t0 + 5.2, "수탉: (할 말 없음)")
 
 
 # ------------------------------------------------------------------ 11. 그 사이 (뮌헨 / LA)
 
 class Meanwhile(Scene):
-    dur = 10.0
+    dur = 8.2
 
     def draw(self, img, d, t):
         d.rectangle([0, 0, 239, H], fill=(200, 30, 50))
@@ -923,145 +913,131 @@ class Meanwhile(Scene):
         d.line([(240, 0), (240, H)], fill=BLACK, width=4)
         ctext(d, 6, "한편, 뮌헨의 케인", WHITE, cx=120)
         ctext(d, 6, "한편, LA의 쏘니", WHITE, cx=360)
-        # 케인: 발롱도르 준비 완료
         blit(img, chibi("kane"), 93, 104, 3)
         trophy(d, 50, 150)
         trophy(d, 190, 150)
-        if t > 0.6:
-            k = min(1.0, (t - 0.6) / 0.5)
+        if t > 0.3:
+            k = min(1.0, (t - 0.3) / 0.5)
             ctext(d, 28, "발롱도르 준비 완료!", GOLD, cx=120)
             d.rectangle([30, 52, 210, 64], fill=BLACK, outline=WHITE)
             d.rectangle([32, 54, 32 + int(176 * k), 62], fill=GOLD)
             ctext(d, 68, "배당 1순위 · 시즌 72골", WHITE, cx=120)
             ctext(d, 86, "(분데스리가·포칼 우승)", LGRAY, cx=120)
-        # 쏘니: 슬럼프
         blit(img, chibi("son", mood="sad"), 333, 104, 3)
         for i in range(3):
             kk = (t * 0.6 + i / 3) % 1
             d.ellipse([388 + i * 8, 118 - 20 * kk, 393 + i * 8, 123 - 20 * kk], outline=LGRAY)
-        if t > 1.6:
+        if t > 0.9:
             ctext(d, 28, "상태이상: 슬럼프...", (140, 190, 255), cx=360)
             ctext(d, 50, "최근 10경기 1골", LGRAY, cx=360)
             ctext(d, 68, "(미드필더로 기용 중)", LGRAY, cx=360)
-        if t > 3.6:
-            k = t - 3.6
+        if t > 2.2:
+            k = t - 2.2
             y0 = int(270 - 84 * min(1.0, k / 0.3))
             d.rectangle([60, y0, 420, y0 + 84], fill=(30, 30, 50), outline=WHITE, width=2)
-            blit(img, COCK_CRY if t > 6.4 else COCK, 76, y0 + 16, 2)
-            since = k - 0.3
+            blit(img, COCK_CRY if t > 5.2 else COCK, 76, y0 + 16, 2)
             lines = ["토트넘을 떠나면 잘 된다?", "케인: O  /  쏘니: ...X"]
-            if t > 6.4:
+            since = k - 0.3
+            if t > 5.2:
                 lines = ["쏘니야... 우리 같이 힘내자...", "(토트넘도 20위다)"]
-                since = t - 6.4
+                since = t - 5.2
             lines_at(d, 124, y0 + 12, lines, since, WHITE)
 
     def audio(self, m, t0):
-        play(m, t0, 1.6, TITLE, 170, drums="k h s h")
-        m.sfx(t0 + 0.6, "fanfare")
-        play(m, t0 + 1.6, 8.2, SAD, 110, drums=None, duty=0.5, vol=0.07)
-        m.sfx(t0 + 1.6, "sad")
-        blip_lines(m, t0 + 3.9, ["토트넘을 떠나면 잘 된다?", "케인: O  /  쏘니: ...X"])
-        blip_lines(m, t0 + 6.4, ["쏘니야... 우리 같이 힘내자...", "(토트넘도 20위다)"])
+        play(m, t0, 1.0, TITLE, 170, drums="k h s h")
+        m.sfx(t0 + 0.3, "fanfare")
+        play(m, t0 + 1.0, 7.0, SAD, 110, drums=None, duty=0.5, vol=0.07)
+        m.sfx(t0 + 0.9, "sad")
+        blip_lines(m, t0 + 2.5, ["토트넘을 떠나면 잘 된다?", "케인: O  /  쏘니: ...X"])
+        blip_lines(m, t0 + 5.2, ["쏘니야... 우리 같이 힘내자...", "(토트넘도 20위다)"])
 
 
 # ------------------------------------------------------------------ 12. 컨티뉴
 
 class Continue(Scene):
-    dur = 10.5
-    COUNT0, STEP = 0.3, 0.6
-    COIN = 3.9
+    dur = 7.8
+    COUNT0, STEP = 0.2, 0.42
+    COIN = 2.8
 
     def draw(self, img, d, t):
         d.rectangle([0, 0, W, H], fill=BLACK)
-        if t < 4.6:
+        if t < 3.4:
             ctext(d, 12, "계속하시겠습니까?", RED, F32, shadow=DRED)
             n = 9 - int(max(0.0, t - self.COUNT0) / self.STEP)
             if t >= self.COUNT0:
                 ctext(d, 56, str(max(n, 3)), WHITE, F64, shadow=GRAY)
-            if 1.6 < t < 3.9 and blink(t, 2):
+            if 1.0 < t < 2.8 and blink(t, 2):
                 ctext(d, 236, "동전을 넣으세요", GOLD)
         d.rectangle([392, 130, 432, 180], fill=(40, 40, 40), outline=LGRAY)
         d.rectangle([408, 136, 414, 172], fill=BLACK)
-        if self.COIN <= t < self.COIN + 0.5:
-            k = (t - self.COIN) / 0.5
+        if self.COIN <= t < self.COIN + 0.45:
+            k = (t - self.COIN) / 0.45
             cy = -16 + 150 * k * k
             d.ellipse([401, cy, 421, cy + 20], fill=GOLD, outline=BLACK)
             text(d, 407, cy + 2, "£", BROWN, shadow=None)
             if cy < 100:
                 text(d, 428, cy, "ENIC", LGRAY)
-        if t >= self.COIN + 0.5:
+        if t >= self.COIN + 0.45:
             text(d, 360, 190, "크레딧 1", WHITE)
-            if t < 6.2:
-                text(d, 268, 210, "(ENIC이 또 지갑을 열었다)", LGRAY)
-        k = t - 4.8
+            text(d, 268, 210, "(ENIC이 또 지갑을 열었다)", LGRAY)
+        k = t - 3.4
         if k >= 0:
-            jy = -int(50 * 4 * (k / 0.5) * (1 - k / 0.5)) if k < 0.5 else 0
-            blit(img, COCK_CRY if t > 7.2 else COCK, 222, 170 + jy, 2)
+            jy = -int(50 * 4 * (k / 0.45) * (1 - k / 0.45)) if k < 0.45 else 0
+            blit(img, COCK_CRY if t > 6.2 else COCK, 222, 170 + jy, 2)
         else:
             blit(img, COCK_CRY, 222, 170, 2, flip_v=True)
-        if t >= 5.4:
+        if t >= 3.9:
             ctext(d, 18, "다음 스테이지 ▶ 맨유 원정", WHITE, F32, shadow=NAVY2)
             ctext(d, 60, "10월 10일 · 올드 트래포드", LGRAY)
-        if t >= 6.4:
+        if t >= 5.0:
             text(d, 120, 94, "데 제르비의 목숨", RED)
             for i in range(3):
                 col = RED if i == 0 else (70, 60, 70)
                 x = 250 + i * 26
                 d.polygon([(x, 98), (x + 10, 110), (x + 20, 98), (x + 15, 93), (x + 10, 98), (x + 5, 93)], fill=col)
-        if t >= 7.2:
+        if t >= 6.2:
             text(d, 262, 160, "수탉: 꿀꺽...", WHITE)
 
     def audio(self, m, t0):
-        m.seq(t0 + 0.3, 3.6, "A3 - - - E3 - - - F3 - - - E3 - - -", 150, 2, "tri", 0.2)
+        m.seq(t0 + 0.2, 2.6, "A3 - - - E3 - - - F3 - - - E3 - - -", 180, 2, "tri", 0.2)
         for k in range(7):
             m.sfx(t0 + self.COUNT0 + k * self.STEP, "tick")
         m.sfx(t0 + self.COIN, "coin")
-        m.sfx(t0 + 4.4, "ding")
-        m.sfx(t0 + 4.8, "jump")
-        play(m, t0 + 5.4, 1.8, TITLE, 190)
-        m.sfx(t0 + 7.2, "gulp")
+        m.sfx(t0 + 3.2, "ding")
+        m.sfx(t0 + 3.4, "jump")
+        play(m, t0 + 3.9, 1.8, TITLE, 190)
+        m.sfx(t0 + 6.2, "gulp")
 
 
 # ------------------------------------------------------------------ 13. 엔딩
 
 class Ending(Scene):
-    dur = 10.0
-    fade_out = 1.2
-    WALKERS = [("dezerbi", None), ("vdv", "home"), ("fernandes", "away"), ("tonali", "home"),
-               ("gallagher", "away")]
+    dur = 6.6
+    fade_out = 1.0
+    WALKERS = [("dezerbi", None), ("vdv", "home"), ("fernandes", "away"), ("tonali", "home"), ("gallagher", "away")]
 
     def draw(self, img, d, t):
         d.rectangle([0, 0, W, H], fill=BLACK)
         draw_stars(d, t, 6, n=40, seed=3)
-        ctext(d, 8, "시청해 주셔서 감사합니다!", WHITE)
-        blit(img, COCK_RUN if int(t * 5) % 2 else COCK, 14 + t * 16 + 5 * 44, 140, 2)
-        if t > 1.0:
-            ctext(d, 34, reveal("하지만 트로피는", t - 1.0, 12), WHITE)
-        if t > 2.2:
-            ctext(d, 56, reveal("다른 성에 있습니다!", t - 2.2, 10), GOLD, F32, shadow=DRED)
-        cx, cy = 390, 136
-        d.rectangle([cx, cy, cx + 60, cy + 42], fill=(150, 80, 40), outline=BLACK)
-        for bx in range(cx, cx + 60, 12):
-            d.rectangle([bx, cy - 8, bx + 6, cy], fill=(150, 80, 40), outline=BLACK)
-        d.rectangle([cx + 22, cy + 18, cx + 38, cy + 42], fill=BLACK)
-        d.line([(cx + 30, cy - 8), (cx + 30, cy - 30)], fill=LGRAY)
-        d.polygon([(cx + 30, cy - 30), (cx + 46, cy - 25), (cx + 30, cy - 20)], fill=RED)
-        text(d, cx + 26, cy + 1, "?", GOLD, shadow=None)
+        ctext(d, 10, "시청해 주셔서 감사합니다!", WHITE)
+        if t > 0.6:
+            ctext(d, 36, reveal("수탉의 모험은 계속된다...", t - 0.6, 16), LGRAY)
+        if t > 1.8:
+            ctext(d, 58, reveal("아직 33경기 남았다!", t - 1.8, 12), GOLD, F32, shadow=DRED)
         d.line([(0, 178), (W, 178)], fill=GRAY)
+        blit(img, COCK_RUN if int(t * 5) % 2 else COCK, 14 + t * 18 + 5 * 44, 140, 2)
         for i, (k, kit) in enumerate(self.WALKERS):
-            x = -10 + t * 16 + i * 44
-            blit(img, chibi(k, int(t * 5 + i) % 2, kit=kit), x, 110, 2)
-        if t > 4.2:
+            blit(img, chibi(k, int(t * 5 + i) % 2, kit=kit), 14 + t * 18 + i * 44, 110, 2)
+        if t > 3.4:
             ctext(d, 190, "가자, 토트넘!", GOLD, F32, shadow=NAVY2)
-        if t > 5.0:
+        if t > 3.8:
             ctext(d, 246, "※ 2026.09.24 기준 실제 결과 바탕의 풍자 패러디", GRAY)
 
     def audio(self, m, t0):
-        mel = "C5:0.3 E5:0.3 G5:0.3 C6:0.6 B5:0.3 G5:0.3 A5:0.6 F5:0.3 D5:0.3 G5:0.9 E5:0.3 C5:0.3 D5:0.3 C5:1.2"
-        m.notes(t0 + 0.3, mel, vol=0.08, duty=0.25)
-        m.notes(t0 + 0.3, "C3:1.2 F2:1.2 G2:1.2 C3:1.2 G2:0.6 C3:1.2", kind="tri", vol=0.2)
-        for n in ("C4", "E4", "G4"):
-            m.notes(t0 + 7.2, f"{n}:1.6", vol=0.05)
+        play(m, t0 + 0.2, 5.0, TITLE, 170)
+        for n in ("C4", "E4", "G4", "C5"):
+            m.notes(t0 + 5.2, f"{n}:1.2", vol=0.05)
+        m.blips(t0 + 0.6, "수탉의 모험은 계속된다...", 16)
 
 
 # -------------------------------------------------------------------------- main
@@ -1094,9 +1070,8 @@ class Slow(Scene):
 
 
 def build():
-    return [Slow(Title(), 1.3), Slow(ManagerSelect(), 1.4), Slow(Platformer(), 1.3), Shop(),
-            Slow(Battle(), 1.4), Protest(), Tetris(), Slow(Meanwhile(), 1.4), Slow(Continue(), 1.3),
-            Slow(Ending(), 1.2)]
+    return [Title(), ManagerSelect(), Slow(Platformer(), 1.05), Shop(), Battle(), Protest(),
+            Meanwhile(), Continue(), Ending()]
 
 
 def main():
