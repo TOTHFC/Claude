@@ -28,6 +28,8 @@ VOICES = {  # 배역: (음성, 속도, 높낮이)
     "son": ("ko-KR-HyunsuMultilingualNeural", "-4%", "+14Hz"),
     "villain": ("ko-KR-InJoonNeural", "+4%", "-34Hz"),
     "fan": ("ko-KR-HyunsuMultilingualNeural", "+12%", "+4Hz"),
+    "fan2": ("ko-KR-InJoonNeural", "+6%", "-10Hz"),       # 마을 할아버지
+    "fan3": ("ko-KR-SunHiNeural", "+10%", "-8Hz"),        # 마을 아주머니
     "sing": ("ko-KR-SunHiNeural", "-22%", "+0Hz"),
     "sing_kid": ("ko-KR-SunHiNeural", "-22%", "+80Hz"),
     "sing_m": ("ko-KR-InJoonNeural", "-22%", "+0Hz"),
@@ -73,7 +75,7 @@ def _synth(text, voice, rate, pitch, out, words=None):
 # ------------------------------------------------------------------ 타입캐스트
 
 TC_URL = "https://api.typecast.ai/v1/text-to-speech"
-TC_ROLES = ("nar", "dz", "koko", "kids", "kane", "son", "villain", "fan")
+TC_ROLES = ("nar", "dz", "koko", "kids", "kane", "son", "villain", "fan", "fan2", "fan3")
 # 배역: (목소리 이름들, 기본 감정, 속도, 음높이 반음). kids 는 여러 아이 목소리를 겹쳐 합창으로 만든다.
 CAST = {
     "nar": (["Nana"], "happy", 1.05, 0),
@@ -84,6 +86,8 @@ CAST = {
     "son": (["Guri"], "sad", 0.95, 0),
     "villain": (["Koombo"], "angry", 1.0, -2),
     "fan": (["Chan-gu"], "angry", 1.1, 0),
+    "fan2": (["Jongdae"], "angry", 1.0, 0),
+    "fan3": (["Lala"], "angry", 1.1, 0),
 }
 
 
@@ -183,7 +187,7 @@ EL_API = "https://api.elevenlabs.io"
 EL_CAST_FILE = os.path.join(HERE, "eleven_voices.json")  # audition_eleven.py 가 만든다: {배역: [voice_id, ...]}
 EL_TAGS = {"happy": "[excited] ", "toneup": "[excited] ", "sad": "[sad] ", "angry": "[angry] ",
            "whisper": "[whispers] ", "tonedown": "[nervous] "}
-EL_DEFAULT_EMO = {"nar": "happy", "koko": "happy", "kids": "happy", "villain": "angry", "fan": "angry",
+EL_DEFAULT_EMO = {"nar": "happy", "koko": "happy", "kids": "happy", "villain": "angry", "fan": "angry", "fan2": "angry", "fan3": "angry",
                   "son": "sad"}
 _EL_OK = None
 

@@ -402,7 +402,7 @@ def person(cv, key, x, y, s=1.0, mood="smile", talk=0.0, blink=None, arms=(10, 1
     cv.restore()
 
 
-def villager(cv, i, x, y, s=1.0, mood="angry", talk=0.0, arms=(150, 150), bob=0.0, sign=None, t=0.0):
+def villager(cv, i, x, y, s=1.0, mood="angry", talk=0.0, arms=(150, 150), bob=0.0, sign=None, t=0.0, look=None):
     """토트넘 마을 사람들(팬). 네이비·흰 목도리."""
     hairs = ["villager_a", "villager_b", "villager_a", "buzz", "villager_b", "curly"]
     hcs = [(90, 60, 40), (30, 24, 22), (220, 180, 100), (40, 30, 26), (160, 80, 50), (30, 24, 22)]
@@ -410,6 +410,8 @@ def villager(cv, i, x, y, s=1.0, mood="angry", talk=0.0, arms=(150, 150), bob=0.
     tops = [(120, 180, 250), (255, 170, 190), (140, 210, 140), (250, 200, 90), (200, 160, 240), (255, 150, 110)]
     sp = dict(name="팬", skin=skins[i % 6], hair=hairs[i % 6], hc=hcs[i % 6], beard=None, brow=darker(hcs[i % 6], 0.8),
               outfit="villager", shirt=tops[i % 6])
+    if look:  # 할아버지(흰머리)·아주머니(뽀글 파마) 같은 모습 바꾸기
+        sp.update(look)
 
     def scarf(cv, hands):
         cv.drawLine(-24, -104, 24, -104, stroke(NAVY, 12))

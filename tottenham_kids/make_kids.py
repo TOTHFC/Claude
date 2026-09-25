@@ -36,7 +36,8 @@ SONG_BEAT = 60 / SONG_BPM
 SPEAKER = {  # 자막 이름표: (이름, 색)
     "nar": ("해설", (255, 120, 160)), "dz": ("데 제르비", (60, 60, 80)), "koko": ("꼬꼬", (230, 60, 60)),
     "kids": ("어린이들", (255, 160, 40)),
-    "villain": ("악당", (120, 40, 140)), "fan": ("마을 사람들", (40, 70, 160)),
+    "villain": ("악당", (120, 40, 140)), "fan": ("마을 청년", (40, 70, 160)),
+    "fan2": ("마을 할아버지", (90, 110, 60)), "fan3": ("마을 아주머니", (200, 80, 130)),
 }
 
 
@@ -1290,39 +1291,62 @@ class Quiz(Scene):
 
 class Angry(Scene):
     bgm = ("angry", 0.7)
+    # 말하는 마을 사람: (배역, 자리 번호). 청년·아주머니·할아버지가 차례로 따진다.
+    LOOKS = {1: dict(hair="curly", hc=(60, 44, 40), skin="light", shirt=(255, 160, 190)),
+             2: dict(hair="villager_a", hc=(220, 220, 225), skin="tan", beard="mustache", bc=(215, 215, 220),
+                     brow=(200, 200, 205), shirt=(150, 200, 150))}
+    SIGNS = ["우승이라며?!", "빌드업 그만!", "20등 실화?", "그래도 힘내라…"]
+    XS = (170, 390, 890, 1110)
 
     def setup(self):
         self.sfx(0.3, "crowd_angry", 0.8)
-        self.t_fans, e = self.line("fans", t=1.4)
+        self.turns = []
+        for lid, role, seat, gap in (("fans1", "fan", 0, None), ("fans2", "fan3", 1, 0.25), ("fans3", "fan2", 2, 0.25)):
+            st, e = self.line(lid, t=1.3 if gap is None else None, gap=gap or 0.0)
+            self.turns.append((st, e, role, seat))
         self.t_sorry, e = self.line("sorry", gap=0.7)
         self.dur = e + 1.3
+
+    def speaker(self, t):
+        for st, e, role, seat in self.turns:
+            if st - 0.1 <= t < e + 0.2:
+                return role, seat
+        return None, None
 
     def cam(self, t):
         if t >= self.t_sorry - 0.2:
             return 1.0 + 0.14 * ease_out((t - self.t_sorry + 0.2) / 0.6), 640, 400
+        _, seat = self.speaker(t)
+        if seat is not None:  # 말하는 사람 쪽으로 살짝
+            return 1.06, (self.XS[seat] + 640) / 2, 420
         return 1.0 + 0.03 * ease(t / 3), W / 2, H / 2
 
     def draw(self, cv, t):
         bg_village(cv, t * 0.2, pan=200)
         cv.drawRect(skia.Rect.MakeWH(W, H), fill((255, 60, 40), 36))
         caption(cv, "빌라전이 끝나고…", 200, 70, 38, WHITE, (150, 40, 40))
-        signs = ["선수는 잔뜩 샀는데?!", "바뀐 게 없잖아!", "이번 시즌은 다르다며!", "20등 실화?"]
         arrive = ease_out((t - 0.1) / 1.2)
-        for i, x in enumerate((170, 390, 890, 1110)):
+        role_now, seat_now = self.speaker(t)
+        for i, x in enumerate(self.XS):
             xx = x + (1 - arrive) * (-400 if x < 640 else 400)
             y = GROUND + 50
-            b = bounce(t + i * 0.3, 2.5, 12)
-            K.villager(cv, i, xx, y, 0.95, mood="angry", talk=self.talk("fan", t) if i in (1, 2) else 0,
-                       arms=(20, 175), bob=b, t=t)
-            s_ = signs[i]
+            talking = seat_now == i
+            b = bounce(t + i * 0.3, 2.5, 14 if talking else 6)
+            K.villager(cv, i, xx, y, 0.95, mood="angry" if i < 3 else "sad",
+                       talk=self.talk(role_now, t) if talking else 0,
+                       arms=(20, 175) if talking else ((20, 120) if i < 3 else (30, 30)), bob=b, t=t,
+                       look=self.LOOKS.get(i))
+            s_ = self.SIGNS[i]
             w = text_w(s_, 30)
             sy = y - 300 - b - (i % 2) * 56
             sx = min(max(xx, w / 2 + 110), W - w / 2 - 110)
-            blob(cv, rrect(sx - w / 2 - 14, sy - 34, sx + w / 2 + 14, sy + 16, 10), WHITE, 4, oc=(200, 60, 60),
-                 shade=False)
-            text(cv, s_, sx, sy + 6, 30, (200, 40, 40), align="center")
+            blob(cv, rrect(sx - w / 2 - 14, sy - 34, sx + w / 2 + 14, sy + 16, 10), WHITE, 4,
+                 oc=(200, 60, 60) if i < 3 else (60, 90, 170), shade=False)
+            text(cv, s_, sx, sy + 6, 30, (200, 40, 40) if i < 3 else (60, 90, 170), align="center")
         K.person(cv, "dezerbi", 640, GROUND + 70, 1.15, mood="sad" if t >= self.t_sorry else "sweat",
-                 talk=self.talk("dz", t), arms=(60, 60), tilt=math.sin(t * 20) * 2 if t < self.t_sorry else 0)
+                 talk=self.talk("dz", t), arms=(60, 60), tilt=math.sin(t * 20) * 2 if t < self.t_sorry else 0,
+                 look=((-4 if seat_now is not None and self.XS[seat_now] < 640 else 4), 0) if seat_now is not None
+                 else (0, 0))
         if t < self.t_sorry:
             for i in range(3):
                 sweat(cv, 560 + i * 80, 330 + ((t * 90 + i * 30) % 70), 1.2)
@@ -1518,13 +1542,11 @@ class Ending(Scene):
         logo(cv, W / 2, 150, 0.62, t, 0.2, 0.04)
         if t > 1.5:
             a = int(255 * min(1, (t - 1.5) / 0.6))
-            text(cv, "제작 · 토트넘 마을 방송국", W / 2, 272, 30, (60, 60, 100), align="center", outline=WHITE, ow=6, a=a)
+            text(cv, "제작 · 타튼햄", W / 2, 272, 30, (60, 60, 100), align="center", outline=WHITE, ow=6, a=a)
             text(cv, "주제가 「힘내요! 데 제르비」", W / 2, 312, 26, (60, 60, 100), align="center", outline=WHITE,
                  ow=6, a=a)
         if t > self.t_bye:
-            caption(cv, "다음에 또 만나요!", 640, 386, 64, YELLOW, (255, 110, 150))
-            text(cv, "※ 2026.09.24 기준 실제 결과를 바탕으로 한 풍자 패러디입니다", 640, 426, 24, (60, 60, 90),
-                 align="center", outline=WHITE, ow=6)
+            caption(cv, "다음에 또 만나요!", 640, 396, 64, YELLOW, (255, 110, 150))
 
 
 # ------------------------------------------------------------------ 조립 / 렌더
