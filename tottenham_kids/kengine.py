@@ -158,7 +158,25 @@ def heart_path(cx, cy, s):
 
 
 def shadow(cv, cx, cy, rx, a=60):
-    cv.drawPath(oval(cx, cy, rx, rx * 0.22), fill((0, 0, 0), a))
+    """부드럽게 번진 바닥 그림자."""
+    p = fill((0, 0, 0), a)
+    p.setMaskFilter(skia.MaskFilter.MakeBlur(skia.kNormal_BlurStyle, max(2.0, rx * 0.12)))
+    cv.drawPath(oval(cx, cy, rx, rx * 0.24), p)
+
+
+def glow(cv, path, col, sigma=18, a=150):
+    """경로 둘레에 은은한 빛."""
+    p = fill(col, a)
+    p.setMaskFilter(skia.MaskFilter.MakeBlur(skia.kNormal_BlurStyle, sigma))
+    cv.drawPath(path, p)
+
+
+def vignette(cv, a=70):
+    p = skia.Paint(AntiAlias=True)
+    p.setShader(skia.GradientShader.MakeRadial(skia.Point(W / 2, H / 2), W * 0.75,
+                                               [C((0, 0, 0), 0), C((0, 0, 0), 0), C((20, 10, 30), a)],
+                                               [0.0, 0.62, 1.0]))
+    cv.drawRect(skia.Rect.MakeWH(W, H), p)
 
 
 # ------------------------------------------------------------------- 움직임

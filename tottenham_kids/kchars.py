@@ -54,6 +54,18 @@ PEOPLE = {
 
 EYE = (44, 32, 40)
 
+# 프레임마다 make_kids.frame() 이 전체 시간을 넣어 준다: 숨쉬기·자동 눈깜빡임·말할 때 고개 움직임에 쓴다.
+CLOCK = 0.0
+
+
+def _phase(key):
+    return (sum(ord(c) for c in str(key)) % 97) / 97 * 6.28
+
+
+def auto_blink(key, extra=0.0):
+    ph = (CLOCK + _phase(key) * 0.5 + extra) % 3.4
+    return ph < 0.11
+
 
 # ------------------------------------------------------------------ 옷
 
@@ -295,10 +307,19 @@ def face(cv, mood="smile", talk=0.0, blink=False, look=(0, 0), brow=(40, 30, 30)
 
 # ------------------------------------------------------------------ 사람
 
-def person(cv, key, x, y, s=1.0, mood="smile", talk=0.0, blink=False, arms=(10, 10), kit="home", look=(0, 0),
+def person(cv, key, x, y, s=1.0, mood="smile", talk=0.0, blink=None, arms=(10, 10), kit="home", look=(0, 0),
            flip=False, bob=0.0, squash=0.0, tilt=0.0, walk=None, spec=None, prop=None):
-    """발 가운데가 (x, y). arms=(왼팔각, 오른팔각). walk=걷기 위상."""
+    """발 가운데가 (x, y). arms=(왼팔각, 오른팔각). walk=걷기 위상.
+    blink=None 이면 저절로 눈을 깜빡이고, 가만히 있어도 숨을 쉬며, 말할 때는 고개와 팔이 조금씩 움직인다."""
     sp = dict(spec or PEOPLE[key])
+    ph = _phase(key or sp.get("hair", "") + str(sp.get("shirt", "")))
+    if blink is None:
+        blink = auto_blink(key or ph)
+    breath = math.sin(CLOCK * 2.3 + ph)
+    head_rot = math.sin(CLOCK * 1.1 + ph) * 1.5 + (math.sin(CLOCK * 9 + ph) * 3 * min(1, talk * 2) if talk > 0.05 else 0)
+    if talk > 0.05:  # 말할 때 손짓
+        g = math.sin(CLOCK * 5 + ph) * 8 * min(1, talk * 2)
+        arms = (arms[0] + (g if arms[0] < 60 else 0), arms[1] + (-g if arms[1] < 60 else 0))
     outfit = sp.get("outfit", "kit")
     skin = SKINS[sp["skin"]]
     shirt, trim, shorts = _shirt_cols(outfit, sp.get("shirt", kit))
@@ -309,7 +330,7 @@ def person(cv, key, x, y, s=1.0, mood="smile", talk=0.0, blink=False, arms=(10, 
     cv.translate(0, -bob)
     cv.scale(1 + squash * 0.12, 1 - squash * 0.12)
     cv.rotate(tilt)
-    # 다리
+    # 다리 (숨쉬기는 다리 위부터)
     lk = math.sin(walk * math.pi * 2) * 7 if walk is not None else 0
     sock = WHITE if outfit == "kit" and kit == "home" else (28, 30, 50) if outfit == "kit" else (
         (40, 40, 44) if outfit in ("dz", "lafc") else (230, 230, 230) if outfit != "villager" else (60, 60, 80))
@@ -326,6 +347,10 @@ def person(cv, key, x, y, s=1.0, mood="smile", talk=0.0, blink=False, arms=(10, 
         shoe = (40, 40, 48) if outfit == "dz" else (255, 255, 255) if outfit == "villager" else (
             (250, 210, 60) if kit == "home" else (255, 90, 170))
         blob(cv, oval(lx + sx * 4, -6 - max(0, dy), 15, 8.5), shoe, 3)
+    cv.save()
+    cv.translate(0, -40)
+    cv.scale(1, 1 + breath * 0.012)
+    cv.translate(0, 40)
     # 반바지/바지
     blob(cv, rrect(-31, -60, 31, -32, 10), shorts, 3, shade=False)
     cv.drawLine(0, -46, 0, -32, stroke(darker(shorts, 0.7), 2))
@@ -358,7 +383,8 @@ def person(cv, key, x, y, s=1.0, mood="smile", talk=0.0, blink=False, arms=(10, 
         prop(cv, hands)
     # 머리
     cv.save()
-    cv.translate(0, -160)
+    cv.translate(0, -160 - breath * 1.2)
+    cv.rotate(head_rot)
     hc = sp["hc"]
     _hair_back(cv, sp["hair"], hc)
     for sx in (-1, 1):
@@ -371,6 +397,7 @@ def person(cv, key, x, y, s=1.0, mood="smile", talk=0.0, blink=False, arms=(10, 
     _hair_front(cv, sp["hair"], hc)
     if mood in ("sweat", "worry", "shock"):
         sweat(cv, 58, -34, 1.1)
+    cv.restore()
     cv.restore()
     cv.restore()
 
@@ -391,13 +418,18 @@ def villager(cv, i, x, y, s=1.0, mood="angry", talk=0.0, arms=(150, 150), bob=0.
         if sign:
             ex, ey = hands[1]
             cv.drawLine(ex, ey, ex, ey - 60, stroke((150, 100, 60), 6))
-    person(cv, None, x, y, s, mood, talk, False, arms, "home", bob=bob, spec=sp, prop=scarf)
+    person(cv, None, x, y, s, mood, talk, None, arms, "home", bob=bob, spec=sp, prop=scarf)
 
 
 # ------------------------------------------------------------------ 수탉 꼬꼬
 
-def rooster(cv, x, y, s=1.0, mood="smile", talk=0.0, flap=0.0, flip=False, bob=0.0, blink=False, ball=False,
+def rooster(cv, x, y, s=1.0, mood="smile", talk=0.0, flap=0.0, flip=False, bob=0.0, blink=None, ball=False,
             tilt=0.0):
+    if blink is None:
+        blink = auto_blink("koko")
+    bob += (math.sin(CLOCK * 2.6) + 1) * 1.5
+    if talk > 0.05:
+        tilt += math.sin(CLOCK * 10) * 4 * min(1, talk * 2)
     cv.save()
     cv.translate(x, y)
     shadow(cv, 0, 0, 40 * s)
