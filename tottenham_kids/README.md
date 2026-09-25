@@ -87,6 +87,9 @@ python3 audition_eleven.py   # 한국어 목소리 라이브러리에서 배역�
 python3 make_kids.py
 ```
 
+현재 영상의 대사는 일레븐랩스 음성입니다. 배역은 `eleven_audition.txt`에 있습니다.
+해설 Sujin, 데 제르비 Manbo, 꼬꼬 Juwonmom, 어린이들 Chaemong·Hana Lee·JY, 케인 Taemin, 쏘니 Han, 악당 Jang Ho, 마을 사람들 Minjun.
+
 ## 만들기
 
 ```bash

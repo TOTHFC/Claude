@@ -264,11 +264,25 @@ def eleven(text, role, emotion=None):
     return out
 
 
+EL_TEMPO = {"nar": 1.1, "villain": 1.1}  # 일레븐랩스 해설·악당은 조금 느려서 음높이는 그대로 두고 빠르게
+
+
+def speedup(a, k):
+    """음높이는 유지하고 k배 빠르게(PSOLA)."""
+    import parselmouth
+    from parselmouth.praat import call
+    snd = parselmouth.Sound(a.astype(np.float64), SR)
+    out = call(snd, "Lengthen (overlap-add)", 75, 600, 1 / k)
+    return out.values[0].astype(np.float32)
+
+
 def char_voice(text, role, emotion=None):
     """캐릭터 음성: 일레븐랩스 → 타입캐스트 순서로 쓸 수 있는 것. 둘 다 안 되면 None(edge-tts 로)."""
     if role not in TC_ROLES:
         return None
     a = eleven(text, role, emotion)
+    if a is not None and role in EL_TEMPO:
+        return speedup(a, EL_TEMPO[role])
     if a is None:
         a = typecast(text, role, emotion)
     return a
