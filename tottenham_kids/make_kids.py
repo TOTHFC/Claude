@@ -151,10 +151,14 @@ class Scene:
                                end=t + len(a) / SR, marks=mk))
         return t + len(a) / SR
 
+    bgm = None       # (배경음악 이름, 음량) ─ 같은 곡이 이어지는 장면은 끊기지 않고 계속된다
+    duck_song = True
+
     def sfx(self, t, name, vol=1.0):
         self.sfxs.append((t, name, vol))
 
     def bed(self, t, arr, vol=1.0):
+        """노래처럼 통째로 까는 음원(음악 버스)."""
         self.beds.append((t, arr, vol))
 
     def talk(self, who, t):
@@ -171,13 +175,13 @@ class Scene:
                 cur = ln
         return cur
 
-    def audio(self, m, t0):
+    def audio(self, voice, fx, music, t0):
         for ln in self.lines:
-            m.add(t0 + ln["t"], ln["a"], 1.0)
+            voice.add(t0 + ln["t"], ln["a"], 1.0)
         for t, n, v in self.sfxs:
-            m.sfx(t0 + t, n, v)
+            fx.add(t0 + t, sfx_audio(n), v)
         for t, a, v in self.beds:
-            m.add(t0 + t, a, v)
+            music.add(t0 + t, a, v)
 
     def setup(self):
         pass
@@ -400,14 +404,81 @@ def score_board(cv, x, y, left, right, sl, sr, k=1.0):
     cv.restore()
 
 
-# ------------------------------------------------------------------ 주제가(Suno) 타이밍
+# ------------------------------------------------------------------ 소리 자원(일레븐랩스로 만든 효과음·배경음악)
+
+import json  # noqa: E402
+
+from kengine import SFX as SYNTH_SFX  # noqa: E402
+
+_SND = {}
+
+
+def _active(a, thr=0.01):
+    env = np.convolve(np.abs(a), np.ones(441) / 441, "same")
+    idx = np.where(env > thr)[0]
+    return (idx[0], idx[-1]) if len(idx) else (0, len(a))
+
+
+def sfx_audio(name):
+    """sfx/<name>.mp3 를 앞 무음을 자르고 소리 크기를 맞춰 돌려준다. 없으면 합성 효과음."""
+    if name in _SND:
+        return _SND[name]
+    path = os.path.join(HERE, "sfx", f"{name}.mp3")
+    if os.path.exists(path):
+        a = _decode(path)
+        s0, s1 = _active(a)
+        a = a[max(0, s0 - 200):min(len(a), s1 + 4410)].copy()
+        rms = np.sqrt(np.mean(a[: max(1, len(a))] ** 2)) + 1e-9
+        a *= min(0.2 / rms, 0.9 / (np.abs(a).max() + 1e-9))
+        fo = min(len(a), 2205)
+        a[-fo:] *= np.linspace(1, 0, fo)
+    else:
+        a = SYNTH_SFX(name)
+    _SND[name] = a.astype(np.float32)
+    return _SND[name]
+
+
+def bgm_track(name):
+    key = "bgm:" + name
+    if key not in _SND:
+        a = _decode(os.path.join(HERE, "bgm", f"{name}.mp3"))
+        s0, s1 = _active(a, 0.005)
+        a = a[s0:s1].copy()
+        rms = np.sqrt(np.mean(a ** 2)) + 1e-9
+        a *= 0.12 / rms
+        _SND[key] = a.astype(np.float32)
+    return _SND[key]
+
+
+def bgm_segment(name, offset, dur, fade_in=0.6, fade_out=0.8):
+    """배경음악을 offset 초부터 dur 초 길이로. 짧으면 1.5초 겹치며 이어 붙여 반복한다."""
+    tr = bgm_track(name)
+    xf = int(1.5 * SR)
+    need = int((offset + dur) * SR) + 10
+    out = tr.copy()
+    while len(out) < need:
+        nxt = tr.copy()
+        ramp = np.linspace(0, 1, xf)
+        out[-xf:] = out[-xf:] * (1 - ramp) + nxt[:xf] * ramp
+        out = np.concatenate([out, nxt[xf:]])
+    seg = out[int(offset * SR):int(offset * SR) + int(dur * SR)].copy()
+    fi, fo = int(fade_in * SR), int(fade_out * SR)
+    if fi:
+        seg[:fi] *= np.linspace(0, 1, fi)
+    if fo:
+        seg[-fo:] *= np.linspace(1, 0, fo)
+    return seg
+
+
+# ------------------------------------------------------------------ 주제가(Suno)
 
 _SONG_CACHE = {}
 
 
 def song_audio():
     if "a" not in _SONG_CACHE:
-        _SONG_CACHE["a"] = _decode(SONG)
+        a = _decode(SONG)
+        _SONG_CACHE["a"] = a * (0.16 / (np.sqrt(np.mean(a[int(8 * SR):int(31 * SR)] ** 2)) + 1e-9))
     return _SONG_CACHE["a"]
 
 
@@ -420,60 +491,44 @@ def song_clip(t0, t1, fade_in=0.3, fade_out=0.8):
 
 
 def song_beat(ts):
-    """노래 시각 ts 의 박자 위치(정수 = 박)."""
     return (ts - SONG_PHASE) / SONG_BEAT
 
 
-# 음성 인식으로 잰 가사 단어 시각(노래 파일 기준, 초)
-LYRICS = [
-    ("여기는 토트넘 마을", [("여기는", 7.46, 8.86), ("토트넘", 8.86, 10.14), ("마을", 10.14, 10.76)]),
-    ("까만 수염 감독님", [("까만", 10.76, 12.02), ("수염", 12.02, 12.70), ("감독님", 12.70, 13.72)]),
-    ("패스 패스 또 패스", [("패스", 13.72, 15.06), ("패스", 15.06, 15.92), ("또", 15.92, 16.18),
-                        ("패스", 16.18, 17.38)]),
-    ("골키퍼까지 돌려요", [("골키퍼까지", 17.38, 18.60), ("돌려요", 18.60, 19.50)]),
-    ("제르비 제르비 데 제르비", [("제르비", 20.32, 21.02), ("제르비", 21.02, 22.02), ("데", 22.02, 22.54),
-                             ("제르비", 22.54, 23.30)]),
-    ("오늘도 힘을 내요", [("오늘도", 23.30, 23.84), ("힘을", 23.84, 25.06), ("내요", 25.06, 25.72)]),
-    ("제르비 제르비 데 제르비", [("제르비", 26.36, 27.06), ("제르비", 27.06, 28.08), ("데", 28.08, 28.52),
-                             ("제르비", 28.52, 29.44)]),
-    ("강등만은 안 돼요", [("강등만은", 29.44, 30.74), ("안", 30.74, 31.14), ("돼요", 31.14, 31.9)]),
-]
+# 보컬만 분리한 음원에서 음이 시작되는 순간을 재서 맞춘 음절 시각(노래 파일 기준, 초)
+LYRICS = json.load(open(os.path.join(HERE, "song", "theme_suno_lyrics.json")))
 
 
 def karaoke(cv, ts):
     cur = None
-    for words, marks in LYRICS:
-        if marks[0][1] - 0.4 <= ts < marks[-1][2] + 0.3:
-            cur = (words, marks)
+    for ln in LYRICS:
+        if ln["syllables"][0][1] - 0.5 <= ts < ln["end"] + 0.35:
+            cur = ln
     if not cur:
         return
-    words, marks = cur
+    words, syl, end = cur["text"], cur["syllables"], cur["end"]
     size = 50
     w = text_w(words, size)
     y = H - 42
-    a = min(1.0, (ts - marks[0][1] + 0.4) / 0.25)
-    cv.drawPath(rrect(W / 2 - w / 2 - 34, y - size - 16, W / 2 + w / 2 + 34, y + 20, 32), fill(WHITE, int(230 * a)))
+    a = min(1.0, (ts - syl[0][1] + 0.5) / 0.25, max(0.0, (end + 0.35 - ts) / 0.2))
+    cv.drawPath(rrect(W / 2 - w / 2 - 34, y - size - 16, W / 2 + w / 2 + 34, y + 20, 32), fill(WHITE, int(232 * a)))
     cv.drawPath(rrect(W / 2 - w / 2 - 34, y - size - 16, W / 2 + w / 2 + 34, y + 20, 32),
                 stroke((255, 120, 160), 5, int(255 * a)))
     x0 = W / 2 - w / 2
     text(cv, words, x0, y, size, (150, 140, 160), a=int(255 * a))
-    # 단어 안에서는 앞 음절을 빠르게, 끝 음절은 길게 끄는 노래 습관대로 칠한다
-    pos, fill_to = 0, 0.0
-    for wd, s0, s1 in marks:
-        i = words.index(wd, pos)
-        pos = i + len(wd)
-        n = len(wd)
-        for k in range(n):
-            c0 = s0 + (s1 - s0) * 0.62 * k / max(1, n - 1) if n > 1 else s0
-            c1 = s0 + (s1 - s0) * 0.62 * (k + 1) / max(1, n - 1) if k < n - 1 else s1
-            xa, xb = text_w(words[:i + k], size), text_w(words[:i + k + 1], size)
-            if ts >= c1:
-                fill_to = xb
-            elif ts >= c0:
-                fill_to = xa + (xb - xa) * (ts - c0) / max(0.08, c1 - c0)
+    idx = [i for i, ch in enumerate(words) if ch != " "]
+    fill_to = 0.0
+    for k, (ch, st) in enumerate(syl):
+        nx = syl[k + 1][1] if k + 1 < len(syl) else end
+        dur = max(0.08, min(nx - st, 0.35))  # 한 음절은 부르기 시작해서 0.35초 안에 다 칠한다
+        ci = idx[k]
+        xa, xb = text_w(words[:ci], size), text_w(words[:ci + 1], size)
+        if ts >= st + dur:
+            fill_to = xb
+        elif ts >= st:
+            fill_to = xa + (xb - xa) * (ts - st) / dur
     cv.save()
     cv.clipRect(skia.Rect.MakeLTRB(x0 - 5, y - size - 20, x0 + fill_to, y + 24))
-    text(cv, words, x0, y, size, (255, 70, 130), outline=WHITE, ow=4)
+    text(cv, words, x0, y, size, (255, 70, 130), outline=WHITE, ow=4, a=int(255 * a))
     cv.restore()
 
 
@@ -488,53 +543,74 @@ def cast_row(cv, t, keys, y, s, beat, mood="happy", dance=True, x0=170, dx=188, 
                  bob=bounce(beat + i * 0.25, 1, 10) if dance else 0)
 
 
+def league_table(cv, x, y, rows, hi, k=1.0, danger=17):
+    """순위표: rows=[(순위, 팀)], hi=강조할 순위, danger 아래는 강등권(빨간 선)."""
+    if k <= 0:
+        return
+    cv.save()
+    cv.translate(x, y)
+    cv.scale(k, k)
+    h = 46 * len(rows) + 60
+    blob(cv, rrect(-230, 0, 230, h, 24), (255, 255, 255), 5, oc=(60, 70, 120))
+    text(cv, "2025-26 리그 순위", 0, 40, 30, (60, 70, 120), align="center")
+    for i, (rk, team) in enumerate(rows):
+        yy = 60 + i * 46
+        if rk == hi:
+            cv.drawPath(rrect(-214, yy, 214, yy + 42, 12), fill((255, 230, 120)))
+        if rk > danger:
+            cv.drawPath(rrect(-214, yy, 214, yy + 42, 12), fill((255, 200, 200), 180))
+        text(cv, f"{rk}", -180, yy + 32, 28, (70, 60, 90), align="center")
+        text(cv, team, -140, yy + 32, 28, (70, 60, 90))
+        if rk == danger:
+            cv.drawLine(-214, yy + 44, 214, yy + 44, stroke(RED, 4))
+    cv.restore()
+
+
 # ------------------------------------------------------------------ 0. 오프닝 주제가
 
 class Opening(Scene):
     fade = False
-    S0, S1 = 3.0, 33.9  # 노래에서 쓰는 구간
+    S0, S1 = 4.6, 33.6  # 노래에서 쓰는 구간(보컬은 8.55초에 시작)
 
     def setup(self):
-        self.bed(0, song_clip(self.S0, self.S1, 0.4, 1.0), 1.0)
+        self.bed(0, song_clip(self.S0, self.S1, 0.5, 1.2), 1.0)
         self.dur = self.S1 - self.S0
 
     def cam(self, t):
         ts = t + self.S0
-        if ts < 7.4:
+        if ts < 8.5:
             return 1.12 - 0.12 * ease_out((ts - self.S0) / 4.0), W / 2, H / 2 - 20
-        if ts < 10.7:
-            return 1.0 + 0.06 * ease((ts - 7.4) / 3.3), 640, 420
-        if ts < 13.7:
-            return 1.08 - 0.08 * ease_out((ts - 10.7) / 1.2), 640, 330
-        if 29.4 <= ts < 31.4:
-            return 1.0 + 0.08 * ease_out((ts - 29.4) / 0.5), 640, 380
+        if ts < 11.5:
+            return 1.0 + 0.06 * ease((ts - 8.5) / 3.0), 640, 420
+        if ts < 14.6:
+            return 1.08 - 0.08 * ease_out((ts - 11.5) / 1.2), 640, 330
+        if 29.6 <= ts < 31.7:
+            return 1.0 + 0.08 * ease_out((ts - 29.6) / 0.5), 640, 380
         return 1.0 + 0.02 * math.sin(t * 0.8), W / 2, H / 2
 
     def draw(self, cv, t):
         ts = t + self.S0
         beat = song_beat(ts)
         on = 1 - (beat % 1)
-        if ts < 7.4:  # 인트로: 로고와 친구들
+        if ts < 8.45:  # 전주: 로고와 친구들
             bg_rays(cv, t, ((255, 196, 120), (255, 230, 170)))
             glow(cv, oval(W / 2, 320, 380, 170), (255, 250, 220), 60, 160)
             sparkles(cv, t, W / 2, H / 2 - 20, 460, 22, seed=2)
-            logo(cv, W / 2, 300, 1.0 + 0.03 * on, t, 0.4, 0.07)
-            k = pop(t, 1.8, 0.5)
-            if k > 0:
-                cv.save()
-                cv.translate(250, GROUND + 70)
-                cv.scale(k, k)
-                K.person(cv, "dezerbi", 0, 0, 1.15, mood="happy", arms=(20, 165), bob=bounce(beat, 1, 8))
-                cv.restore()
-            k = pop(t, 2.4, 0.5)
-            if k > 0:
-                cv.save()
-                cv.translate(1040, GROUND + 50)
-                cv.scale(k, k)
-                K.rooster(cv, 0, 0, 1.2, ball=True, flap=on, mood="happy")
-                cv.restore()
+            logo(cv, W / 2, 300, 1.0 + 0.03 * on, t, 0.2, 0.06)
+            for key, x, y, sc, t0, is_koko in (("dezerbi", 250, GROUND + 70, 1.15, 0.9, False),
+                                               ("koko", 1040, GROUND + 50, 1.2, 1.4, True)):
+                k = pop(t, t0, 0.5)
+                if k > 0:
+                    cv.save()
+                    cv.translate(x, y)
+                    cv.scale(k, k)
+                    if is_koko:
+                        K.rooster(cv, 0, 0, sc, ball=True, flap=on, mood="happy")
+                    else:
+                        K.person(cv, key, 0, 0, sc, mood="happy", arms=(20, 165), bob=bounce(beat, 1, 8))
+                    cv.restore()
             for i, key in enumerate(("fernandes", "tonali", "vdv", "gallagher")):
-                k = pop(t, 3.0 + i * 0.25, 0.4)
+                k = pop(t, 1.9 + i * 0.25, 0.4)
                 if k > 0:
                     cv.save()
                     cv.translate(470 + i * 115, GROUND + 90)
@@ -542,13 +618,13 @@ class Opening(Scene):
                     K.person(cv, key, 0, 0, 0.62, mood="happy", arms=(20, 160) if int(beat + i) % 2 else (160, 20),
                              bob=bounce(beat + i * 0.3, 1, 8))
                     cv.restore()
-        elif ts < 10.7:  # 여기는 토트넘 마을
-            bg_village(cv, t, pan=(ts - 7.4) * 55)
+        elif ts < 11.5:  # 여기는 토트넘 마을
+            bg_village(cv, t, pan=(ts - 8.45) * 55)
             K.rooster(cv, 640, GROUND, 1.0, flap=on * 0.6, bob=bounce(beat, 1, 10), mood="happy")
-        elif ts < 13.7:  # 까만 수염 감독님
+        elif ts < 14.6:  # 까만 수염 감독님
             bg_polka(cv, t)
             glow(cv, oval(640, 400, 260, 260), (255, 255, 255), 50, 200)
-            k = pop(ts, 10.75, 0.5)
+            k = pop(ts, 11.5, 0.5)
             cv.save()
             cv.translate(640, GROUND + 40)
             cv.scale(k, k)
@@ -557,48 +633,48 @@ class Opening(Scene):
             cv.restore()
             sparkles(cv, t, 640, 320, 330, 14, seed=5)
             tag(cv, "로베르토 데 제르비 감독", 640, 140, (60, 60, 90), 36, int(255 * min(1, k)))
-        elif ts < 20.2:  # 패스 패스 또 패스 / 골키퍼까지 돌려요
+        elif ts < 20.4:  # 패스 패스 또 패스 / 골키퍼까지 돌려요
             bg_pitch(cv, t)
             goal(cv, 110, GROUND - 10, 1.0)
             xs = [1080, 820, 560, 260]
             keys = ["fernandes", "tonali", "vdv", "kinsky"]
-            passes = [13.72, 15.06, 16.18]  # "패스" 마다 한 번씩 뒤로
+            passes = [14.72, 15.11, 16.41]  # "패"를 부를 때마다 한 명씩 뒤로
             bx, by, holder = xs[0] - 50, GROUND - 16, 0
             for i, p0 in enumerate(passes):
-                p1 = p0 + 0.6
+                p1 = p0 + 0.36
                 if ts >= p1:
                     holder = i + 1
                 elif ts >= p0:
                     k = (ts - p0) / (p1 - p0)
                     x0, x1 = xs[i] - 50, xs[i + 1] + 50
                     bx = x0 + (x1 - x0) * ease(k)
-                    by = GROUND - 16 - math.sin(k * math.pi) * 120
+                    by = GROUND - 16 - math.sin(k * math.pi) * 110
                     holder = -1
             if holder >= 0:
                 bx = xs[holder] - 50 if holder < 3 else xs[3] + 50
                 by = GROUND - 16
             for i, (x, key) in enumerate(zip(xs, keys)):
-                mood = "shock" if (key == "kinsky" and ts > 16.7) else "happy" if holder == i else "smile"
+                mood = "shock" if (key == "kinsky" and ts > 17.5) else "happy" if holder == i else "smile"
                 K.person(cv, key, x, GROUND, 1.0, mood=mood, flip=True,
                          arms=(20, 20) if key != "kinsky" else (150, 150), bob=bounce(beat + i * 0.5, 1, 6))
             ball(cv, bx, by, 18, ts * 400)
-            if ts > 17.4:
-                k = pop(ts, 17.5, 0.4)
+            if ts > 18.85:  # "돌려요"
+                k = pop(ts, 18.85, 0.4)
                 cv.save()
                 cv.translate(1150, GROUND + 40)
                 cv.scale(k, k)
                 K.person(cv, "dezerbi", 0, 0, 0.9, mood="happy", arms=(10, 170))
                 cv.restore()
                 tag(cv, "빌드업!", 1150, 300, (60, 60, 90), 32, int(255 * min(1, k)))
-            if 16.9 < ts < 19.6:
+            if 17.52 < ts < 20.3:
                 caption(cv, "?!", 260, 290, 60, YELLOW)
-        elif ts < 31.4:  # 후렴
+        elif ts < 31.7:  # 후렴
             bg_rays(cv, t, ((255, 170, 200), (255, 222, 236)), cy=420)
             draw_rainbow(cv, W / 2, 620, 560, 26, 210)
             cast_row(cv, t, ["fernandes", "tonali", "gallagher", "vdv", "tosin", "mudryk"], GROUND - 40, 0.72,
                      beat, skip=lambda x: abs(x - 640) < 120)
             K.rooster(cv, 200, GROUND + 40, 1.0, ball=True, flap=on, bob=bounce(beat, 1, 6), mood="happy")
-            if ts >= 29.4:  # 강등만은 안 돼요!
+            if ts >= 29.6:  # 강등만은 안 돼요!
                 def sign(cv_, hands):
                     ex, ey = hands[1]
                     ex += 40
@@ -607,10 +683,10 @@ class Opening(Scene):
                     text(cv_, "강등", ex, ey - 94, 38, (60, 40, 50), align="center")
                     cv_.drawPath(oval(ex, ey - 110, 44, 44), stroke((230, 40, 50), 8))
                     cv_.drawLine(ex - 30, ey - 80, ex + 30, ey - 140, stroke((230, 40, 50), 8))
-                K.person(cv, "dezerbi", 640, GROUND + 60, 1.35, mood="angry" if ts < 30.7 else "happy",
+                K.person(cv, "dezerbi", 640, GROUND + 60, 1.35, mood="angry" if ts < 30.6 else "happy",
                          arms=(20, 125), bob=bounce(beat, 1, 6), prop=sign)
-                if ts > 30.7:
-                    k = pop(ts, 30.75, 0.4)
+                if ts > 30.62:  # "안 돼요"
+                    k = pop(ts, 30.62, 0.35)
                     cv.save()
                     cv.translate(1000, 250)
                     cv.scale(k, k)
@@ -620,8 +696,8 @@ class Opening(Scene):
             else:
                 K.person(cv, "dezerbi", 640, GROUND + 60, 1.35, mood="happy" if int(beat) % 4 == 3 else "smile",
                          arms=(165, 20) if int(beat) % 2 else (20, 165), bob=bounce(beat, 1, 12))
-            if 24.9 < ts < 26.3:  # 힘내요!
-                k = pop(ts, 25.0, 0.3)
+            if 24.42 <= ts < 25.9:  # "힘을 내요"
+                k = pop(ts, 24.42, 0.3)
                 cv.save()
                 cv.translate(1000, 220)
                 cv.scale(k, k)
@@ -629,20 +705,21 @@ class Opening(Scene):
                 text(cv, "힘내요!", 0, 16, 46, (255, 90, 60), TF_TITLE, align="center")
                 cv.restore()
             sparkles(cv, t, 640, 300, 560, 16, seed=9)
-        else:  # 데 제르비! ─ 로고
+        else:  # 마무리: 로고
             bg_rays(cv, t, ((150, 210, 255), (210, 236, 255)))
-            confetti(cv, t, t0=31.1 - self.S0)
-            logo(cv, W / 2, 330, 1.0 + 0.05 * on, ts, 31.4, 0.035)
+            confetti(cv, t, t0=31.7 - self.S0)
+            logo(cv, W / 2, 330, 1.0 + 0.05 * on, ts, 31.7, 0.035)
         karaoke(cv, ts)
 
 
 # ------------------------------------------------------------------ 1. 에피소드 제목
 
 class TitleCard(Scene):
+    bgm = ("village", 0.8)
+
     def setup(self):
-        self.sfx(0.1, "twinkle", 0.7)
+        self.sfx(0.15, "twinkle", 0.8)
         _, e = self.line("title", t=0.7)
-        self.bed(0, bgm("happy", e + 1.2, 1), 0.35)
         self.dur = e + 1.0
 
     def draw(self, cv, t):
@@ -675,83 +752,46 @@ class TitleCard(Scene):
         K.rooster(cv, 1130, H + 150 - peek * 0.9, 1.0, flap=abs(math.sin(t * 8)), mood="happy")
 
 
-# ------------------------------------------------------------------ 2. 지난 시즌
+# ------------------------------------------------------------------ 2. 마을 소개
 
-class Recap(Scene):
+TABLE = [(17, "토트넘 · 승점 41"), (18, "웨스트햄")]
+
+
+class Intro(Scene):
+    bgm = ("village", 0.8)
+
     def setup(self):
-        _, e = self.line("recap1", t=0.9)
-        self.t_fall = e - 0.3
-        self.sfx(self.t_fall, "fall", 0.6)
-        self.line("hammer", t=self.t_fall + 0.35, who="hammer")
-        self.sfx(self.t_fall + 1.0, "thud", 0.6)
-        self.t_ok = self.t_fall + 1.3
-        self.cur = max(self.cur, self.t_ok)
-        _, e = self.line("recap2", gap=0.1)
-        self.sfx(e, "twinkle", 0.6)
-        self.t_koko, e = self.line("recap3", gap=0.5)
-        self.bed(0, bgm("happy", e + 1.5, 2), 0.3)
-        self.dur = e + 1.1
+        self.t1, e = self.line("intro1", t=0.9)
+        self.t2, e = self.line("intro2", gap=0.6)
+        self.sfx(self.t2 + 0.2, "whoosh", 0.7)
+        self.t_drop = self.t2 + 2.2
+        self.sfx(self.t_drop, "stamp", 0.8)
+        self.t_koko = 1e9
+        self.dur = max(e, self.t_drop + 0.6) + 1.0
 
     def cam(self, t):
-        if t < 1.0:
-            return 1.0, W / 2, H / 2
-        if t < self.t_ok + 0.3:
-            return 1.0 + 0.1 * ease((t - 1.0) / 2.0), 520, 470
-        return 1.1 - 0.1 * ease((t - self.t_ok) / 1.2), 520, 470
+        if t < self.t2:
+            return 1.0 + 0.05 * ease(t / self.t2), 640, 420
+        return 1.0, W / 2, H / 2
 
     def draw(self, cv, t):
-        bg_village(cv, t * 0.3, pan=60 + t * 6)
-        # 강등 구덩이
-        glow(cv, oval(430, 662, 240, 50), (60, 20, 20), 20, 120)
-        cv.drawPath(oval(430, 655, 250, 60), fill((110, 70, 50)))
-        cv.drawPath(oval(430, 662, 222, 44), linear((20, 12, 12), (60, 30, 30), 0, 620, 0, 700))
-        cv.drawLine(170, 640, 170, 540, stroke((150, 100, 60), 8))
-        blob(cv, rrect(80, 486, 262, 560, 12), (255, 238, 120), 4, oc=(200, 120, 40))
-        text(cv, "강등 구덩이", 171, 535, 30, (200, 60, 50), align="center")
-        # 가장자리의 집(토트넘 마을)을 데 제르비가 밧줄로 붙잡는다
-        worried = t < self.t_ok
-        lean = (math.sin(t * 3) * 3 + 12) if worried else 12 * max(0.0, 1 - (t - self.t_ok) / 0.6)
-        cv.save()
-        cv.translate(640, 610)
-        cv.rotate(-lean)
-        house(cv, 0, 0, 0.8, roof=NAVY2)
-        text(cv, "토트넘", 0, -40, 20, NAVY, align="center")
-        cv.restore()
-        hx, hy = 640 - math.sin(math.radians(lean)) * 70, 540
-        K.person(cv, "dezerbi", 900, GROUND + 30, 1.05, mood="sweat" if worried else "happy",
-                 talk=self.talk("dz", t), arms=(95, 95) if worried else (20, 165),
-                 tilt=-10 if worried else 0, bob=0 if worried else bounce(t, 1.5, 6))
-        rope_end = (900 - 40 * 1.05, GROUND + 30 - 100)
-        cv.drawLine(hx, hy, rope_end[0], rope_end[1], stroke((170, 120, 70), 5))
-        if worried:
-            for i in range(2):
-                sweat(cv, 840 + i * 120, 360 + ((t * 80 + i * 40) % 60), 1.2)
-        # 망치(웨스트햄)가 대신 빠진다
-        if t < self.t_fall + 1.0:
-            k = max(0.0, (t - self.t_fall) / 0.9)
-            x = 470 - 60 * min(1, k * 1.5)
-            y = 560 + 240 * k * k
-            if y < 720:
-                K.hammer(cv, x, y, 1.4, rot=k * 220 + (math.sin(t * 12) * 8 if k == 0 else 0))
-                if k == 0 and t > 1.0:
-                    caption(cv, "웨스트햄", 470, 450, 28, WHITE, (130, 40, 70))
-        if t > self.t_fall + 0.9:
-            caption(cv, "대신 웨스트햄이 강등…", 300, 440, 28, WHITE, (90, 40, 60),
-                    a=int(255 * min(1, (t - self.t_fall - 0.9) / 0.3)))
-        if t > self.t_koko - 0.3:
-            k = pop(t, self.t_koko - 0.3, 0.45)
-            cv.save()
-            cv.translate(1130, GROUND + 30)
-            cv.scale(k, k)
-            K.rooster(cv, 0, 0, 1.0, talk=self.talk("koko", t), flap=abs(math.sin(t * 9)), mood="happy")
-            cv.restore()
-            cv.save()
-            cv.translate(1130, 290)
-            cv.scale(k, k)
-            burst(cv, 0, 0, 80, YELLOW, ORANGE, 10, seed=7)
-            text(cv, "17위", 0, 16, 44, RED, TF_TITLE, align="center")
-            cv.restore()
-            caption(cv, "2025-26 시즌 · 마지막 날 1-0 승리로 잔류", 640, 80, 32, WHITE, (60, 60, 120))
+        bg_village(cv, t * 0.4, pan=30 + t * 10)
+        # 감독님과 선수들(마을 축구단)
+        K.person(cv, "vdv", 250, GROUND + 20, 0.72, mood="smile", arms=(20, 20))
+        K.person(cv, "kinsky", 360, GROUND + 30, 0.72, mood="smile", arms=(20, 20))
+        K.person(cv, "dezerbi", 520, GROUND + 60, 1.0, mood="happy" if t < self.t2 else "sweat",
+                 arms=(20, 160) if t < self.t2 else (40, 40))
+        K.rooster(cv, 680, GROUND + 50, 0.9, talk=self.talk("koko", t), mood="happy" if t >= self.t_koko else "smile",
+                  flap=abs(math.sin(t * 8)) if t >= self.t_koko else 0)
+        if t >= self.t2:  # 순위표가 들어온다
+            k = ease_out((t - self.t2) / 0.6)
+            league_table(cv, 1300 - 330 * k, 150, TABLE, 17, 1.0, danger=17)
+            if t >= self.t_drop:  # 웨스트햄은 강등
+                stamp(cv, "강등", 1120, 262, t, self.t_drop, RED, 0.45)
+                caption(cv, "토트넘은 간신히 잔류!", 970, 350, 34, WHITE, (60, 140, 60),
+                        a=int(255 * min(1.0, (t - self.t_drop) / 0.4)))
+        if t >= self.t_koko:
+            sweat(cv, 720, 470 + ((t - self.t_koko) * 60) % 40, 1.2)
 
 
 # ------------------------------------------------------------------ 3. 여름: 새 친구 버스
@@ -761,30 +801,31 @@ NEW = [("fernandes", "£85M"), ("tonali", "£92.5M"), ("savinho", "£75M"), ("va
 
 
 class Summer(Scene):
+    bgm = ("village", 0.8)
+
     def setup(self):
-        self.sfx(1.6, "bus_horn", 0.6)
-        self.line("summer", t=0.7)
-        self.t_names, e = self.line("names", gap=0.7, marks=True)
+        self.sfx(1.5, "bus_horn", 0.8)
+        self.line("summer", t=0.6)
+        self.t_names, e = self.line("names", gap=0.6, marks=True)
         mk = self.lines[-1]["marks"]
         first = [mk[i][1] for i in range(4)]
         rest0 = mk[3][2] + 0.2
         self.pops = [self.t_names + x for x in first] + [self.t_names + rest0 + i * 0.2 for i in range(5)]
         for p in self.pops:
             self.sfx(p, "pop", 0.6)
-        self.sfx(e - 0.2, "coins", 0.6)
-        self.t_win, e = self.line("win", gap=0.7)
-        self.sfx(self.t_win, "fanfare", 0.4)
-        self.t_romero = e + 0.6
-        self.sfx(self.t_romero - 0.3, "plane", 0.5)
-        e = self.t_romero + 2.6
-        self.bed(0, bgm("summer", e + 1.5, 3), 0.3)
-        self.dur = e + 0.4
+        self.sfx(e, "coins", 0.7)
+        self.t_win, e = self.line("win", gap=0.8)
+        self.sfx(self.t_win, "fanfare", 0.5)
+        self.t_kwin, e = self.line("win_koko", gap=0.2)
+        self.t_romero = e + 0.5
+        self.sfx(self.t_romero - 0.4, "plane", 0.8)
+        self.dur = self.t_romero + 3.0
 
     def cam(self, t):
         if t < self.t_win:
             return 1.0 + 0.04 * ease(t / self.t_win), 700, 420
         if t < self.t_romero:
-            return 1.04 + 0.06 * ease_out((t - self.t_win) / 0.5), 470, 480
+            return 1.04 + 0.06 * ease_out((t - self.t_win) / 0.5), 330, 560
         return 1.0, W / 2, H / 2
 
     def draw(self, cv, t):
@@ -796,7 +837,7 @@ class Summer(Scene):
         cv.drawRect(skia.Rect.MakeLTRB(0, 470, W, 560), fill((200, 200, 212)))
         for x in range(0, W, 120):
             cv.drawRect(skia.Rect.MakeLTRB(x + 20, 510, x + 80, 518), fill(WHITE))
-        caption(cv, "☀ 2026 여름 이적시장", 230, 70, 38, WHITE, (230, 120, 60))
+        caption(cv, "2026 여름 이적시장", 210, 70, 38, WHITE, (230, 120, 60))
         k = ease_out((t - 0.3) / 2.2)
         bx = 1500 - (1500 - 330) * k
         K.bus(cv, bx, 545, 1.0, t=-bx / 300, door=min(1, max(0, (t - self.t_names + 0.4) / 0.4)))
@@ -810,24 +851,25 @@ class Summer(Scene):
             x = 230 + (tx - 230) * ease_out(kk)
             y = 520 + (ty - 520) * ease_out(kk) - math.sin(kk * math.pi) * 150
             K.person(cv, key, x, y, 0.62, mood="happy" if won else "smile", arms=(160, 160) if won else (20, 20),
-                     bob=bounce(t + i * 0.2, 2, 6) if won else 0, squash=max(0, 1 - (t - p - 0.5) / 0.15) * 0.8
-                     if 0.5 <= t - p < 0.65 else 0)
+                     bob=bounce(t + i * 0.2, 2, 6) if won and t < self.t_romero else 0)
             if kk >= 1:
                 a = int(255 * min(1, (t - p - 0.5) / 0.2))
                 tag(cv, price, x, y - 175, (255, 110, 150) if price.startswith("£") else (90, 170, 250), 22, a)
         if won:
             k = pop(t, self.t_win, 0.4)
             cv.save()
-            cv.translate(420, 610)
+            cv.translate(170, 700)
             cv.scale(k, k)
-            K.person(cv, "dezerbi", 0, 0, 0.85, mood="happy", arms=(170, 170), talk=self.talk("dz", t),
-                     bob=bounce(t, 2, 10))
+            K.person(cv, "dezerbi", 0, 0, 0.85, mood="happy" if t < self.t_romero else "shock",
+                     arms=(170, 170) if t < self.t_romero else (40, 40), talk=self.talk("dz", t),
+                     bob=bounce(t, 2, 10) if t < self.t_romero else 0)
             cv.restore()
-            sparkles(cv, t, 420, 450, 150, 8, seed=4)
-            if t > self.t_win + 0.3:
-                caption(cv, "우승이다!!", 420, 330, 44, YELLOW, (230, 100, 40))
-        if t >= self.t_romero - 0.3:
-            k = (t - self.t_romero + 0.3) / 3.0
+            K.rooster(cv, 330, 700, 0.75, talk=self.talk("koko", t), flap=abs(math.sin(t * 9)) if t < self.t_romero
+                      else 0, mood="happy" if t < self.t_romero else "shock")
+            if t < self.t_romero:
+                sparkles(cv, t, 200, 520, 150, 8, seed=4)
+        if t >= self.t_romero - 0.4:
+            k = (t - self.t_romero + 0.4) / 3.4
             px = 1450 - k * 1750
             py = 150 + k * 30
             blob(cv, rrect(px - 90, py - 26, px + 90, py + 26, 26), WHITE, 4, oc=(120, 130, 170))
@@ -840,36 +882,52 @@ class Summer(Scene):
             K.person(cv, "romero", 0, 0, 1.0, mood="smile", arms=(20, 170))
             cv.restore()
             caption(cv, "그런데 주장 로메로는 아틀레티코로… 안녕~", px + 60, py - 46, 26, WHITE, (200, 60, 60))
-            K.person(cv, "dezerbi", 420, 610, 0.85, mood="shock", arms=(40, 40))
+
+
+def stamp(cv, s, x, y, t, t0, col=RED, sc=1.0):
+    if t < t0:
+        return
+    k = (1 + 1.2 * max(0.0, 1 - (t - t0) / 0.18)) * sc
+    cv.save()
+    cv.translate(x, y)
+    cv.rotate(-8)
+    cv.scale(k, k)
+    w = max(240, text_w(s, 60, TF_TITLE) + 60)
+    blob(cv, rrect(-w / 2, -50, w / 2, 40, 18), WHITE, 7, oc=col, shade=False)
+    text(cv, s, 0, 18, 60, col, TF_TITLE, align="center")
+    cv.restore()
 
 
 # ------------------------------------------------------------------ 4. 개막전: 빌드업 변신
 
 class Match1(Scene):
+    bgm = ("match", 0.75)
+
     def setup(self):
-        self.sfx(1.4, "buzz", 0.6)
+        self.sfx(1.6, "buzz", 0.7)
         _, e = self.line("m1", t=0.8)
-        self.t_bee, e = self.line("bee", gap=0.5, who="bee")
-        self.t_h, e = self.line("henshin", gap=0.5)
+        self.t_bee, e = self.line("bee", gap=0.4, who="bee")
+        self.t_h, e = self.line("henshin", gap=0.6)
         self.t_tr = e + 0.1
-        self.sfx(self.t_tr, "henshin", 0.8)
-        self.line("henshin_kids", t=self.t_tr + 0.3)
+        self.sfx(self.t_tr, "henshin", 0.9)
+        self.line("henshin_kids", t=self.t_tr + 0.4)
         self.t_back = self.t_tr + 2.4
         self.cur = self.t_back
-        _, e = self.line("back", t=self.t_back + 0.2)
+        self.line("back", t=self.t_back + 0.2)
         self.t_pass = self.t_back
+        for i in range(3):
+            self.sfx(self.t_pass + 0.2 + i * 0.7, "whoosh", 0.4)
         self.t_steal = self.t_back + 2.2
+        self.sfx(self.t_steal, "buzz", 0.6)
         self.line("thanks", t=self.t_steal + 0.1, who="bee")
         self.t_goal = self.t_steal + 1.2
         for i in range(3):
-            self.sfx(self.t_goal + i * 0.55, "goal_net", 0.6)
+            self.sfx(self.t_goal + i * 0.55, "goal_net", 0.8)
         self.t_res = self.t_goal + 1.8
-        self.sfx(self.t_res, "sad_trombone", 0.7)
+        self.sfx(self.t_res, "sad_trombone", 0.8)
         self.cur = self.t_res
-        _, e = self.line("m1r", gap=0.4)
-        self.bed(0, bgm("villain", self.t_tr, 4), 0.28)
-        self.bed(self.t_back, bgm("villain", self.t_res - self.t_back, 5), 0.28)
-        self.dur = e + 0.9
+        _, e = self.line("m1r", gap=0.3)
+        self.dur = e + 1.0
 
     def cam(self, t):
         if self.t_tr <= t < self.t_back:
@@ -877,7 +935,7 @@ class Match1(Scene):
         if self.t_bee <= t < self.t_h:
             return 1.12, 800, 330
         if self.t_h <= t < self.t_tr:
-            return 1.15, 1100, 470
+            return 1.12, 1080, 470
         if self.t_goal <= t < self.t_res:
             return 1.06 + math.sin(t * 50) * 0.004, 400, 450
         return 1.0 + 0.03 * ease(t / self.dur), W / 2, H / 2
@@ -919,11 +977,11 @@ class Match1(Scene):
         if after:
             self.dz_hero(cv, 1180, GROUND + 60, 0.85, t, mood="happy" if t < self.t_steal else "shock")
         else:
-            K.person(cv, "dezerbi", 1180, GROUND + 60, 0.85, mood="worry" if t < self.t_h else "angry",
+            K.person(cv, "dezerbi", 1180, GROUND + 60, 0.85, mood="worry" if t < self.t_h else "happy",
                      talk=self.talk("dz", t), arms=(20, 20) if t < self.t_h else (170, 30), flip=True)
         if t < self.t_steal:
             if t < 3.0:
-                bxx = 1500 - 700 * ease_out((t - 1.2) / 1.4)
+                bxx = 1500 - 700 * ease_out((t - 1.4) / 1.4)
             else:
                 bxx = 800 + math.sin(t * 2) * 40
             if after:
@@ -991,60 +1049,48 @@ class Match1(Scene):
             cv.restore()
 
 
-# ------------------------------------------------------------------ 5. 연패: 짧은 장면 세 개 + 빌라전
-
-def stamp(cv, s, x, y, t, t0, col=RED):
-    if t < t0:
-        return
-    k = 1 + 1.2 * max(0.0, 1 - (t - t0) / 0.18)
-    cv.save()
-    cv.translate(x, y)
-    cv.rotate(-8)
-    cv.scale(k, k)
-    blob(cv, rrect(-120, -50, 120, 40, 18), WHITE, 7, oc=col, shade=False)
-    text(cv, s, 0, 18, 60, col, TF_TITLE, align="center")
-    cv.restore()
-
+# ------------------------------------------------------------------ 5. 연패
 
 class Montage(Scene):
+    bgm = ("montage", 0.7)
+
     def setup(self):
         self.ta, e = self.line("mont_a", t=0.7)
-        self.sfx(self.ta + 0.2, "caw", 0.5)
-        self.sa = e + 0.1
-        self.sfx(self.sa, "thud", 0.5)
-        self.tb, e = self.line("mont_b", gap=0.75)
-        for i in range(3):
-            self.sfx(self.tb + 0.6 + i * 0.7, "boing", 0.45)
-        self.sb = e + 0.1
-        self.sfx(self.sb, "thud", 0.5)
-        self.tc, e = self.line("mont_c", gap=0.75)
-        self.sfx(self.tc + 0.3, "snore", 0.5)
-        self.sc = e + 0.1
-        self.sfx(self.sc, "thud", 0.5)
-        self.tv, e = self.line("mont2", gap=0.95)
-        self.sfx(self.tv, "roar", 0.5)
-        self.g1, self.g2 = e - 1.6, e - 0.8
-        self.sfx(self.g1, "goal_net", 0.4)
-        self.sfx(self.g2, "goal_net", 0.4)
+        self.sfx(self.ta, "caw", 0.7)
+        self.sa = e + 0.05
+        self.sfx(self.sa, "stamp", 0.8)
+        self.tb, e = self.line("mont_b", gap=0.9)
+        for i in range(2):
+            self.sfx(self.tb + 0.5 + i * 0.7, "boing", 0.9)
+        self.sb = e + 0.35
+        self.sfx(self.sb, "stamp", 0.8)
+        self.tc, e = self.line("mont_c", gap=0.9)
+        self.sfx(self.tc + 0.2, "snore", 0.7)
+        self.sc = e + 0.05
+        self.sfx(self.sc, "stamp", 0.8)
+        self.tv, e = self.line("mont2", gap=1.0)
+        self.sfx(self.tv, "roar", 0.7)
+        self.g1, self.g2 = self.tv + 1.2, self.tv + 2.1
+        self.sfx(self.g1, "goal_net", 0.7)
+        self.sfx(self.g2, "goal_net", 0.7)
         self.t_more, e = self.line("more", gap=0.3)
         self.t_end = e + 0.5
-        self.sfx(self.t_end, "buzzer", 0.5)
-        self.cur = self.t_end
-        _, e = self.line("mont3", gap=0.3)
+        self.sfx(self.t_end, "whistle", 0.8)
+        self.cur = self.t_end + 0.6
+        _, e = self.line("mont3", gap=0.0)
         self.t_tab = e + 0.2
-        self.bed(0, bgm("villain", self.t_tab + 2.5, 6), 0.26)
-        self.dur = self.t_tab + 1.7
+        self.sfx(self.t_tab, "sad_trombone", 0.6)
+        self.dur = self.t_tab + 2.0
 
     def cam(self, t):
         for t0 in (self.ta, self.tb, self.tc):
-            if t0 - 0.6 <= t < t0 + 3.6:
+            if t0 - 0.6 <= t < t0 + 3.4:
                 return 1.0 + 0.05 * ease((t - t0 + 0.6) / 4.0), W / 2, H / 2
         if t >= self.t_end:
             return 1.0 + 0.05 * ease((t - self.t_end) / 2), 640, 360
         return 1.0 + 0.03 * math.sin(t * 0.5), W / 2, H / 2
 
     def slide(self, cv, t, t_in):
-        """장면이 바뀔 때 옆으로 밀어내기."""
         k = ease_out((t - t_in) / 0.45)
         cv.translate((1 - k) * W, 0)
 
@@ -1067,29 +1113,47 @@ class Montage(Scene):
             self.villa(cv, t)
             cv.restore()
 
-    def vignette_a(self, cv, t):  # 뉴캐슬 까치가 이적료 주머니를 물고 날아간다
+    def calendar(self, cv, t):  # "그다음 경기도 마찬가지였어요" ─ 달력이 넘어간다
+        cv.drawRect(skia.Rect.MakeWH(W, H), fill((236, 230, 252)))
+        blob(cv, rrect(440, 150, 840, 560, 30), WHITE, 6, oc=(150, 130, 190))
+        cv.drawRect(skia.Rect.MakeLTRB(446, 156, 834, 250), fill((255, 110, 150)))
+        text(cv, "2026년 8~9월", 640, 222, 44, WHITE, TF_TITLE, align="center")
+        for i in range(5):
+            x = 500 + (i % 3) * 120
+            y = 320 + (i // 3) * 120
+            k = pop(t, 0.9 + i * 0.25, 0.3)
+            if k > 0:
+                cv.save()
+                cv.translate(x + 40, y)
+                cv.scale(k, k)
+                text(cv, ["패", "패", "무", "무", "패"][i], 0, 16, 56, RED if i in (0, 1, 4) else (90, 90, 130),
+                     TF_TITLE, align="center")
+                cv.restore()
+        K.person(cv, "dezerbi", 1040, GROUND + 60, 0.95, mood="sweat", arms=(40, 40))
+
+    def vignette_a(self, cv, t):
         cv.drawRect(skia.Rect.MakeWH(W, H), fill((236, 236, 242)))
         for i in range(0, W, 80):
             cv.drawRect(skia.Rect.MakeLTRB(i, 0, i + 40, H), fill((222, 222, 232)))
         caption(cv, "2라운드 · 뉴캐슬(홈)", 230, 70, 34, WHITE, (40, 40, 60))
         K.person(cv, "tonali", 360, GROUND + 30, 1.0, mood="sweat", arms=(60, 20))
         K.person(cv, "dezerbi", 150, GROUND + 50, 0.85, mood="worry")
-        k = ease_out((t - self.ta) / 1.8)
-        mx = 1300 - 500 * k + math.sin(t * 4) * 10
+        k = ease_out((t - self.ta) / 1.6)
+        mx = 1300 - 480 * k + math.sin(t * 4) * 10
         my = 330 - 60 * math.sin(k * 3.1)
         K.magpie(cv, mx, my, 1.3, t, bag=True)
-        if t > self.ta + 0.6:
+        if t > self.ta + 0.5:
             caption(cv, "토날리 이적료로 배부른 까치", mx, my - 190, 26, WHITE, (40, 40, 60))
         stamp(cv, "0 : 2", 640, 200, t, self.sa)
 
-    def vignette_b(self, cv, t):  # 포레스트 나무가 슛을 다 막는다
+    def vignette_b(self, cv, t):
         bg_pitch(cv, t, (190, 230, 190))
         caption(cv, "3라운드 · 노팅엄 포레스트(원정)", 290, 70, 34, WHITE, (40, 90, 40))
         K.tree(cv, 1000, GROUND + 20, 1.1, t)
         K.person(cv, "fernandes", 380, GROUND, 0.95, mood="angry", kit="away", arms=(20, 60))
         K.person(cv, "mudryk", 200, GROUND, 0.85, mood="sweat", kit="away")
-        for i in range(3):
-            s0 = self.tb + 0.4 + i * 0.7
+        for i in range(2):
+            s0 = self.tb + 0.1 + i * 0.7
             if s0 <= t < s0 + 0.7:
                 k = (t - s0) / 0.7
                 x = 430 + (900 - 430) * min(1, k * 1.6) - max(0, k - 0.62) * 900
@@ -1099,7 +1163,7 @@ class Montage(Scene):
                     burst(cv, 900, GROUND - 120, 40, YELLOW, ORANGE, 8, seed=i)
         stamp(cv, "0 : 0", 640, 200, t, self.sb, (60, 120, 60))
 
-    def vignette_c(self, cv, t):  # 에버튼과 둘 다 쿨쿨
+    def vignette_c(self, cv, t):
         bg_sky(cv, (150, 160, 230), (210, 215, 250))
         caption(cv, "4라운드 · 에버튼(홈)", 230, 70, 34, WHITE, (60, 60, 140))
         cv.drawRect(skia.Rect.MakeLTRB(0, 520, W, H), fill((120, 190, 110)))
@@ -1135,7 +1199,7 @@ class Montage(Scene):
                 text(cv, "골!", 0, 12, 34, RED, TF_TITLE, align="center")
                 cv.restore()
         K.person(cv, "dezerbi", 130, GROUND + 60, 0.85,
-                 mood="cry" if t >= self.t_end else "angry" if t >= self.t_more else "sweat",
+                 mood="cry" if t >= self.t_end else "happy" if t >= self.t_more else "sweat",
                  talk=self.talk("dz", t), arms=(170, 30) if self.t_more <= t < self.t_end else (20, 20))
         if t >= self.t_tab:
             k = pop(t, self.t_tab, 0.5)
@@ -1150,27 +1214,27 @@ class Montage(Scene):
 # ------------------------------------------------------------------ 6. 퀴즈
 
 class Quiz(Scene):
+    bgm = ("quiz", 0.75)
+
     def setup(self):
-        self.sfx(0.2, "slide_up", 0.6)
+        self.sfx(0.2, "slide", 0.6)
         self.line("quiz_kids", t=0.4)
-        _, e = self.line("quiz", gap=0.6)
+        _, e = self.line("quiz", gap=0.5)
         self.t_opt = [e + 0.1, e + 0.5, e + 0.9]
         for x in self.t_opt:
-            self.sfx(x, "pop", 0.6)
+            self.sfx(x, "pop", 0.7)
         self.t_tick = e + 1.25
-        for i in range(3):
-            self.sfx(self.t_tick + i * 0.4, "tick", 0.8)
-        self.t_ans, e = self.line("quiz_ans_kids", t=self.t_tick + 1.25)
-        self.t_ding = e + 0.4
-        self.sfx(self.t_ding, "dingdong", 0.5)
-        self.cur = self.t_ding
-        _, e = self.line("quiz_ans", gap=0.05)
+        self.sfx(self.t_tick, "tick", 0.8)
+        self.t_ans, e = self.line("quiz_ans_kids", t=self.t_tick + 1.3)
+        self.t_ding = e + 0.35
+        self.sfx(self.t_ding, "dingdong", 0.9)
+        self.cur = self.t_ding + 0.5
+        _, e = self.line("quiz_ans", gap=0.0)
         self.t_yay, e2 = self.line("quiz_yay", gap=0.3)
-        self.sfx(self.t_yay, "clap_many", 0.7)
-        self.sfx(self.t_yay, "cheer", 0.5)
-        self.t_awk = e2 + 0.8
-        self.bed(0, bgm("quiz", self.t_ans, 7), 0.28)
-        self.dur = self.t_awk + 1.3
+        self.sfx(self.t_yay, "cheer", 0.8)
+        self.t_awk = e2 + 0.6
+        self.sfx(self.t_awk, "crickets", 0.8)
+        self.dur = self.t_awk + 1.5
 
     def cam(self, t):
         if self.t_ding <= t < self.t_yay:
@@ -1190,7 +1254,7 @@ class Quiz(Scene):
         if t > 1.4:
             caption(cv, "지금 토트넘은 몇 등일까요?", 640, 220, 50, WHITE, (40, 90, 200))
         opts = [("①", "1등", (255, 150, 150)), ("②", "10등", (150, 220, 150)), ("③", "20등", (255, 210, 110))]
-        for i, (n, s, col) in enumerate(opts):
+        for i, (n, s_, col) in enumerate(opts):
             if t < self.t_opt[i]:
                 continue
             kk = pop(t, self.t_opt[i], 0.4)
@@ -1203,12 +1267,12 @@ class Quiz(Scene):
             if right:
                 glow(cv, rrect(-150, -90, 150, 90, 34), (255, 255, 180), 26, 220)
             blob(cv, rrect(-140, -80, 140, 80, 30), col, 6, oc=(90, 90, 140))
-            text(cv, f"{n} {s}", 0, 22, 64, (70, 60, 90), TF_TITLE, align="center")
+            text(cv, f"{n} {s_}", 0, 22, 64, (70, 60, 90), TF_TITLE, align="center")
             cv.restore()
             if right:
                 cv.drawPath(oval(x, 390, 172, 112), stroke(RED, 12))
         if self.t_tick <= t < self.t_ans:
-            text(cv, str(3 - int((t - self.t_tick) / 0.4)), 640, 600, 72, RED, TF_TITLE, align="center",
+            text(cv, str(3 - int((t - self.t_tick) / 0.45)), 640, 600, 72, RED, TF_TITLE, align="center",
                  outline=WHITE, ow=12)
         for i in range(5):
             x = 180 + i * 230
@@ -1218,21 +1282,20 @@ class Quiz(Scene):
                        bob=bounce(t + i * 0.3, 3, 10) if cheer else 0, t=t)
         if t >= self.t_awk:
             caption(cv, "…어?", 640, 560, 64, WHITE, (90, 90, 120), a=int(255 * min(1, (t - self.t_awk) / 0.3)))
-        if t >= self.t_yay:
+        if self.t_yay <= t < self.t_awk + 0.5:
             confetti(cv, t, seed=11, n=40, t0=self.t_yay)
 
 
 # ------------------------------------------------------------------ 7. 화난 마을 사람들
 
 class Angry(Scene):
+    bgm = ("angry", 0.7)
+
     def setup(self):
-        self.sfx(0.3, "crowd_boo", 0.5)
-        self.line("angry0", t=0.6)
-        self.t_fans, e = self.line("fans", gap=0.5)
-        self.sfx(self.t_fans, "crowd_boo", 0.5)
-        self.t_sorry, e = self.line("sorry", gap=0.6)
-        self.bed(0, bgm("angry", e + 1.5, 8), 0.26)
-        self.dur = e + 1.2
+        self.sfx(0.3, "crowd_angry", 0.8)
+        self.t_fans, e = self.line("fans", t=1.4)
+        self.t_sorry, e = self.line("sorry", gap=0.7)
+        self.dur = e + 1.3
 
     def cam(self, t):
         if t >= self.t_sorry - 0.2:
@@ -1244,7 +1307,7 @@ class Angry(Scene):
         cv.drawRect(skia.Rect.MakeWH(W, H), fill((255, 60, 40), 36))
         caption(cv, "빌라전이 끝나고…", 200, 70, 38, WHITE, (150, 40, 40))
         signs = ["선수는 잔뜩 샀는데?!", "바뀐 게 없잖아!", "이번 시즌은 다르다며!", "20등 실화?"]
-        arrive = ease_out((t - 0.2) / 1.6)
+        arrive = ease_out((t - 0.1) / 1.2)
         for i, x in enumerate((170, 390, 890, 1110)):
             xx = x + (1 - arrive) * (-400 if x < 640 else 400)
             y = GROUND + 50
@@ -1265,22 +1328,27 @@ class Angry(Scene):
                 sweat(cv, 560 + i * 80, 330 + ((t * 90 + i * 30) % 70), 1.2)
 
 
-# ------------------------------------------------------------------ 8. 그날 밤: 꼬꼬의 응원
+# ------------------------------------------------------------------ 8. 그날 밤: 꼬꼬의 응원과 깨달음
 
 class Night(Scene):
+    bgm = ("night", 0.8)
+
     def setup(self):
         self.line("night1", t=1.0)
-        self.t_koko, e = self.line("koko_cheer", gap=0.75)
+        self.t_koko, e = self.line("koko_cheer", gap=0.6)
+        self.t_real, e = self.line("dz_realize", gap=0.6)
         self.t_star = e + 0.3
-        self.sfx(self.t_star, "twinkle", 0.6)
-        self.t_dz, e = self.line("dz_wish", gap=0.75)
-        self.bed(0, bgm("night", e + 2, 9), 0.5)
-        self.dur = e + 1.4
+        self.sfx(self.t_star, "shooting_star", 0.9)
+        self.t_dz, e = self.line("dz_wish", t=self.t_star + 1.0)
+        self.sfx(e + 0.1, "twinkle", 0.7)
+        self.dur = e + 1.3
 
     def cam(self, t):
         if t < self.t_koko:
             return 1.0 + 0.06 * ease(t / self.t_koko), 560, 460
-        return 1.06 - 0.06 * ease((t - self.t_koko) / 3.0), 560, 460
+        if t < self.t_star:
+            return 1.06 + 0.04 * ease((t - self.t_koko) / 3), 600, 470
+        return 1.1 - 0.1 * ease((t - self.t_star) / 1.5), 600, 400
 
     def draw(self, cv, t):
         bg_sky(cv, (22, 24, 70), (86, 72, 150))
@@ -1291,42 +1359,47 @@ class Night(Scene):
         glow(cv, oval(1080, 130, 70, 70), (255, 245, 200), 40, 120)
         blob(cv, oval(1080, 130, 52, 52), (255, 246, 205), 0)
         cv.drawPath(oval(1102, 116, 46, 46), fill((24, 26, 72)))
-        if t >= self.t_star:  # 별똥별
-            k = (t - self.t_star) / 1.2
+        if t >= self.t_star:
+            k = (t - self.t_star) / 1.3
             if k < 1:
                 x0, y0 = 300 + k * 600, 60 + k * 200
-                cv.drawLine(x0 - 120, y0 - 40, x0, y0, stroke((255, 255, 220), 5, int(255 * (1 - k))))
-                glow(cv, oval(x0, y0, 10, 10), (255, 255, 200), 10, int(255 * (1 - k)))
+                cv.drawLine(x0 - 140, y0 - 46, x0, y0, stroke((255, 255, 220), 5, int(255 * (1 - k))))
+                glow(cv, oval(x0, y0, 12, 12), (255, 255, 200), 12, int(255 * (1 - k)))
         cv.drawPath(smooth([(-100, 620), (300, 520), (700, 540), (1100, 600), (1400, 640), (1400, 800), (-100, 800)]),
                     fill((40, 60, 70)))
         stadium(cv, 1050, 610, 0.55)
-        for i in range(8):  # 반딧불
+        for i in range(8):
             fx = 200 + i * 140 + math.sin(t * 0.8 + i) * 30
             fy = 560 + math.sin(t * 1.3 + i * 2) * 25
             glow(cv, oval(fx, fy, 5, 5), (255, 240, 120), 6, int(150 + 100 * math.sin(t * 3 + i)))
         dz_mood = "sad" if t < self.t_dz else "happy"
-        K.person(cv, "dezerbi", 520, 600, 1.05, mood=dz_mood, talk=self.talk("dz", t),
-                 arms=(20, 20) if t < self.t_dz else (20, 150), look=(0, -3) if t < self.t_koko else (4, 0))
-        hop = bounce(t, 1.5, 8) if self.t_koko <= t < self.t_star else 0
+        arms = (20, 20) if t < self.t_dz else (20, 170)
+        K.person(cv, "dezerbi", 520, 600, 1.05, mood=dz_mood, talk=self.talk("dz", t), arms=arms,
+                 look=(0, -3) if t < self.t_koko else (4, 0), bob=bounce(t, 1.5, 5) if t >= self.t_dz + 0.5 else 0)
+        hop = bounce(t, 1.5, 8) if self.t_koko <= t < self.t_real else 0
         K.rooster(cv, 700, 598, 0.9, talk=self.talk("koko", t), flip=True, bob=hop,
-                  flap=abs(math.sin(t * 7)) if self.t_koko <= t < self.t_star else 0.1)
-        if t >= self.t_dz + 0.8:
+                  flap=abs(math.sin(t * 7)) if self.t_koko <= t < self.t_real or t >= self.t_dz else 0.1,
+                  mood="happy" if t >= self.t_dz else "smile")
+        if t >= self.t_dz:
             for i in range(3):
                 kk = ((t - self.t_dz) * 0.5 + i / 3) % 1
                 h = heart_path(600 + (i - 1) * 50, 380 - kk * 120, 14)
                 cv.drawPath(h, fill((255, 130, 160), int(255 * (1 - kk))))
+            sparkles(cv, t, 560, 420, 200, 8, seed=21)
 
 
 # ------------------------------------------------------------------ 9. 오늘의 교훈
 
 class Lesson(Scene):
+    bgm = ("lesson", 0.75)
+
     def setup(self):
-        self.sfx(0.1, "chime_lesson", 0.6)
+        self.sfx(0.1, "chime", 0.9)
         self.t_l, e = self.line("lesson", t=0.9, marks=True)
         mk = self.lines[-1]["marks"]
         self.t_l2 = self.t_l + next(m[1] for m in mk if m[0].startswith("잘"))
         self.t_kids, e = self.line("lesson_kids", gap=0.6)
-        self.bed(0, bgm("happy", e + 1.5, 10), 0.28)
+        self.sfx(self.t_kids, "cheer", 0.5)
         self.dur = e + 1.3
 
     def cam(self, t):
@@ -1359,11 +1432,12 @@ class Lesson(Scene):
             cv.scale(k2, k2)
             text(cv, "잘 노는 건 아니에요!", 0, 0, 72, RED, TF_TITLE, align="center", outline=WHITE, ow=12)
             cv.restore()
-        blob(cv, rrect(300, 470, 560, 600, 16), (190, 140, 90), 5)
-        text(cv, "£300M", 430, 555, 40, WHITE, TF_TITLE, align="center")
-        for i, (x, col) in enumerate(((330, RED), (400, SKY), (470, YELLOW), (530, PURPLE))):
-            blob(cv, oval(x, 470 - (i % 2) * 14, 30, 30), col, 4)
-        K.person(cv, "dezerbi", 880, 660, 0.9, mood="cry" if t > self.t_l2 else "sweat")
+        # 친구들이 손잡고 한 팀
+        for i, key in enumerate(("fernandes", "tonali", "dezerbi", "vdv", "gallagher")):
+            x = 380 + i * 130
+            K.person(cv, key, x, 640, 0.62 if key != "dezerbi" else 0.72, mood="happy",
+                     arms=(95, 95), bob=bounce(t + i * 0.2, 1.2, 4) if t >= self.t_kids else 0)
+        K.rooster(cv, 1060, 640, 0.7, mood="happy", flap=abs(math.sin(t * 6)) if t >= self.t_kids else 0)
         if t >= self.t_kids:
             caption(cv, "네에~!", 1060, 470, 50, YELLOW, (230, 120, 40))
 
@@ -1371,17 +1445,18 @@ class Lesson(Scene):
 # ------------------------------------------------------------------ 10. 다음 이야기
 
 class Preview(Scene):
+    bgm = ("preview", 0.75)
+
     def setup(self):
-        self.sfx(0.1, "thunder", 0.7)
+        self.sfx(0.1, "thunder", 0.8)
         self.line("next", t=0.8)
         _, e = self.line("next2", gap=0.5)
         self.t_gulp = e + 0.6
-        self.sfx(self.t_gulp, "gulp", 0.7)
+        self.sfx(self.t_gulp, "gulp", 0.9)
         self.cur = self.t_gulp
         _, e = self.line("gulp", gap=0.05)
-        self.sfx(self.t_gulp + 0.9, "thunder", 0.5)
-        self.bed(0, bgm("tense", e + 2, 11), 0.45)
-        self.dur = e + 1.1
+        self.sfx(self.t_gulp + 0.9, "thunder", 0.6)
+        self.dur = e + 1.2
 
     def cam(self, t):
         if t >= self.t_gulp - 0.2:
@@ -1414,10 +1489,10 @@ class Preview(Scene):
 # ------------------------------------------------------------------ 11. 엔딩
 
 class Ending(Scene):
-    S0, S1 = 43.6, 54.3  # 노래 뒷부분 후렴 끝 + 아우트로
+    S0, S1 = 43.6, 54.3  # 노래 두 번째 후렴 끝 + 아우트로
 
     def setup(self):
-        self.bed(0, song_clip(self.S0, self.S1, 0.6, 1.4), 0.75)
+        self.bed(0, song_clip(self.S0, self.S1, 0.6, 1.4), 0.9)
         self.t_bye, e = self.line("bye", t=6.4)
         self.line("bye_kids", gap=0.15)
         self.dur = self.S1 - self.S0
@@ -1455,7 +1530,7 @@ class Ending(Scene):
 # ------------------------------------------------------------------ 조립 / 렌더
 
 def build():
-    return [Opening(), TitleCard(), Recap(), Summer(), Match1(), Montage(), Quiz(), Angry(), Night(), Lesson(),
+    return [Opening(), TitleCard(), Intro(), Summer(), Match1(), Montage(), Quiz(), Angry(), Night(), Lesson(),
             Preview(), Ending()]
 
 
@@ -1480,13 +1555,57 @@ def frame(scenes, starts, t, surf):
         sc.subtitles(cv, lt)
     if sc.fade and si > 0:
         star_iris(cv, lt / 0.5)
-    if isinstance(sc, Opening) and lt > sc.dur - 0.5:  # 오프닝 끝은 흰 화면으로
+    if isinstance(sc, Opening) and lt > sc.dur - 0.5:
         cv.drawRect(skia.Rect.MakeWH(W, H), fill(WHITE, int(255 * min(1, (lt - sc.dur + 0.5) / 0.5))))
     if si == len(scenes) - 1 and lt > sc.dur - 0.8:
         cv.drawRect(skia.Rect.MakeWH(W, H), fill(BLACK, int(255 * min(1, (lt - sc.dur + 0.8) / 0.8))))
     cv.restore()
     img = surf.makeImageSnapshot().toarray()
     return img[..., [2, 1, 0]]
+
+
+def mix_audio(scenes, starts, total):
+    """대사·효과음·음악을 따로 모은 뒤, 대사가 나오는 동안 음악을 부드럽게 낮춘다(더킹)."""
+    voice, fx, music = Mixer(total), Mixer(total), Mixer(total)
+    prev, off = None, 0.0
+    for i, (s, st) in enumerate(zip(scenes, starts)):
+        s.audio(voice, fx, music, st)
+        if not s.bgm:
+            prev, off = None, 0.0
+            continue
+        name, vol = s.bgm
+        same = prev == name
+        off = off + scenes[i - 1].dur if same else 0.0
+        nxt = scenes[i + 1] if i + 1 < len(scenes) else None
+        cont = bool(nxt is not None and nxt.bgm and nxt.bgm[0] == name)
+        seg = bgm_segment(name, off, s.dur + (0.0 if cont else 0.4), fade_in=0.0 if same else 0.5,
+                          fade_out=0.0 if cont else 0.9)
+        music.add(st, seg, vol)
+        prev = name
+    n = int(total * SR)
+    v, f, m = voice.buf[:n], fx.buf[:n], music.buf[:n]
+    hop = 441
+    env = np.array([np.abs(v[i:i + hop]).max() if i < n else 0 for i in range(0, n, hop)])
+    speaking = (env > 0.02).astype(np.float32)
+    # 말하기 50ms 전부터 내리고, 끝나고 400ms 에 걸쳐 올린다
+    g = np.ones_like(speaking)
+    level = 1.0
+    for i in range(len(speaking) - 1, -1, -1):  # 미리 내리기(앞쪽으로 번짐)
+        if speaking[i]:
+            level = 0.0
+        else:
+            level = min(1.0, level + 1 / 5)
+        g[i] = level
+    fwd = 1.0
+    for i in range(len(g)):
+        target = g[i]
+        fwd = target if target < fwd else min(target, fwd + 1 / 40)
+        g[i] = fwd
+    gain = 1.0 - 0.6 * (1.0 - g)
+    gain_s = np.repeat(gain, hop)[:n]
+    out = v * 1.0 + f * 0.55 + m * gain_s
+    out = np.tanh(out * 1.1) / np.tanh(1.1)
+    return out / max(1e-9, np.max(np.abs(out))) * 0.89
 
 
 def main():
@@ -1511,18 +1630,16 @@ def main():
                 Image.fromarray(frame(scenes, starts, t, surf)).resize((960, 540)).save(
                     os.path.join(outdir, f"s{i:02d}_{f:.2f}.png"))
         return
-    mix_ = Mixer(total)
-    for s, st in zip(scenes, starts):
-        s.audio(mix_, st)
-    buf = mix_.buf[: int(total * SR)]
-    buf = np.tanh(buf * 1.2) / np.tanh(1.2)
-    buf = buf / max(1e-9, np.max(np.abs(buf))) * 0.84
+    buf = mix_audio(scenes, starts, total)
     wav_path = os.path.join(HERE, "_audio_kids.wav")
     with wave.open(wav_path, "wb") as wf:
         wf.setnchannels(1)
         wf.setsampwidth(2)
         wf.setframerate(SR)
         wf.writeframes((buf * 32767).astype(np.int16).tobytes())
+    if "--audio-only" in sys.argv:
+        print("wrote", wav_path)
+        return
     ff = imageio_ffmpeg.get_ffmpeg_exe()
     proc = subprocess.Popen([ff, "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{OW}x{OH}",
                              "-r", str(FPS), "-i", "-", "-i", wav_path, "-c:v", "libx264", "-preset", "slow",
@@ -1531,7 +1648,7 @@ def main():
     n = int(total * FPS)
     for i in range(n):
         proc.stdin.write(np.ascontiguousarray(frame(scenes, starts, i / FPS, surf)).tobytes())
-        if i % 240 == 0:
+        if i % 480 == 0:
             print(f"frame {i}/{n}", flush=True)
     proc.stdin.close()
     proc.wait()
