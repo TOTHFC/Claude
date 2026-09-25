@@ -1,6 +1,6 @@
 """배역별 타입캐스트 후보 목소리를 들어 보고 고르는 도구.
 
-    TYPECAST_API_KEY 를 환경 변수로 둔 상태에서:
+    타입캐스트 키가 환경 변수(TYPECAST_API_KEY) 또는 클라우드 환경의 API credentials 로 등록된 상태에서:
     python3 audition_typecast.py            # _audition/ 에 배역별 후보 wav 저장 + 발음 인식 결과·음높이 출력
 
 고른 목소리는 voice.py 의 CAST 맨 앞 이름으로 바꾸면 된다.
@@ -11,7 +11,7 @@ import wave
 
 import numpy as np
 
-from voice import HERE, SR, trim_silence, typecast_one
+from voice import HERE, SR, trim_silence, typecast_available, typecast_one
 
 SAMPLE = {
     "nar": ("어린이 여러분, 지금 토트넘은 몇 등일까요?", "happy"),
@@ -26,7 +26,7 @@ SAMPLE = {
 
 
 def main():
-    assert os.environ.get("TYPECAST_API_KEY"), "TYPECAST_API_KEY 환경 변수가 필요합니다"
+    assert typecast_available(), "타입캐스트 키가 없습니다(TYPECAST_API_KEY 또는 API credentials)"
     out = os.path.join(HERE, "_audition")
     os.makedirs(out, exist_ok=True)
     cands = json.load(open(os.path.join(HERE, "typecast_voices.json")))

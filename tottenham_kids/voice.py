@@ -1,6 +1,8 @@
 """목소리: 타입캐스트(있으면) 또는 edge-tts 한국어 음성 합성(캐시) + 음절 단위 PSOLA로 노래 부르기.
 
-대사는 환경 변수 TYPECAST_API_KEY 가 있으면 타입캐스트 캐릭터 음성으로 만들고 voice_cache/ 에 저장한다.
+대사는 타입캐스트를 쓸 수 있으면 타입캐스트 캐릭터 음성으로 만들고 voice_cache/ 에 저장한다.
+쓸 수 있는 경우: 환경 변수 TYPECAST_API_KEY 가 있거나, 클라우드 환경의 API credentials 로 등록돼
+에이전트 프록시가 api.typecast.ai 요청에 X-API-KEY 헤더를 붙여 주는 경우(이때 키는 세션에 보이지 않는다).
 한 번 저장한 대사는 키 없이도 다시 쓴다. 키도 캐시도 없으면 edge-tts 로 대신한다.
 배역별 목소리는 typecast_voices.json (후보 목록, 맨 앞이 기본) 과 CAST 로 정한다.
 """
@@ -100,20 +102,41 @@ def _decode(path):
     return np.frombuffer(raw, np.float32).copy()
 
 
+_TC_OK = None
+
+
+def typecast_available():
+    """환경 변수 키가 있거나, 키 없이 보낸 요청이 통과하면(프록시가 키를 붙여 줌) True."""
+    global _TC_OK
+    if _TC_OK is None:
+        if os.environ.get("TYPECAST_API_KEY"):
+            _TC_OK = True
+        else:
+            import urllib.request
+            try:
+                urllib.request.urlopen("https://api.typecast.ai/v1/voices", timeout=20).read(1)
+                _TC_OK = True
+            except Exception:
+                _TC_OK = False
+    return _TC_OK
+
+
 def typecast_one(text, name, emotion="normal", tempo=1.0, pitch=0, intensity=1.2):
-    """타입캐스트 음성 하나(캐시). 키는 환경 변수에서만 읽는다."""
+    """타입캐스트 음성 하나(캐시). 키는 환경 변수에서 읽거나 프록시가 붙여 준다."""
     key = hashlib.md5(f"TC|{name}|{emotion}|{tempo}|{pitch}|{intensity}|{text}".encode()).hexdigest()[:16]
     wav = os.path.join(CACHE, f"tc_{name}_{key}.wav")
     if not os.path.exists(wav) or os.path.getsize(wav) == 0:
-        api_key = os.environ.get("TYPECAST_API_KEY")
-        if not api_key:
+        if not typecast_available():
             return None
+        api_key = os.environ.get("TYPECAST_API_KEY")
         import urllib.request
         body = {"voice_id": _voice_ids()[name], "text": text, "model": "ssfm-v30", "language": "kor",
                 "prompt": {"emotion_preset": emotion, "emotion_intensity": intensity},
                 "output": {"audio_format": "wav", "audio_tempo": tempo, "audio_pitch": pitch}}
-        req = urllib.request.Request(TC_URL, json.dumps(body).encode(),
-                                     {"X-API-KEY": api_key, "Content-Type": "application/json"})
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["X-API-KEY"] = api_key
+        req = urllib.request.Request(TC_URL, json.dumps(body).encode(), headers)
         err = None
         for _ in range(4):
             try:
