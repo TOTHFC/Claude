@@ -75,6 +75,18 @@ python3 make_kids.py           # 대사를 타입캐스트로 새로 합성해 �
 목소리는 `voice.py`의 `CAST`에서, 대사별 감정은 `script.py`의 세 번째 값에서 바꿉니다.
 단어 타이밍이 필요한 대사는 음성 인식(faster-whisper)으로 단어 시각을 구해 저장합니다.
 
+## 일레븐랩스 음성으로 바꾸기
+
+일레븐랩스 키가 있으면 일레븐랩스(eleven_v3, [excited]·[sad] 같은 감정 태그)를 먼저 쓰고, 안 되면 타입캐스트, 그다음 edge-tts 순서로 씁니다.
+
+- **API credentials**: 이름 `ElevenLabs`, 허용 사이트 `api.elevenlabs.io`, 헤더 이름 `xi-api-key`, 접두사 비움, 값에 키
+- **환경 변수**: `ELEVENLABS_API_KEY=키`
+
+```bash
+python3 audition_eleven.py   # 한국어 목소리 라이브러리에서 배역별 후보 오디션 → eleven_voices.json
+python3 make_kids.py
+```
+
 ## 만들기
 
 ```bash

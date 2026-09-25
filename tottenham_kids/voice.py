@@ -1,4 +1,4 @@
-"""목소리: 타입캐스트(있으면) 또는 edge-tts 한국어 음성 합성(캐시) + 음절 단위 PSOLA로 노래 부르기.
+"""목소리: 일레븐랩스·타입캐스트(쓸 수 있으면) 또는 edge-tts 한국어 음성 합성(캐시) + 음절 단위 PSOLA로 노래 부르기.
 
 대사는 타입캐스트를 쓸 수 있으면 타입캐스트 캐릭터 음성으로 만들고 voice_cache/ 에 저장한다.
 쓸 수 있는 경우: 환경 변수 TYPECAST_API_KEY 가 있거나, 클라우드 환경의 API credentials 로 등록돼
@@ -137,6 +137,8 @@ def typecast_one(text, name, emotion="normal", tempo=1.0, pitch=0, intensity=1.2
         if api_key:
             headers["X-API-KEY"] = api_key
         req = urllib.request.Request(TC_URL, json.dumps(body).encode(), headers)
+        import urllib.error
+        global _TC_OK
         err = None
         for _ in range(4):
             try:
@@ -145,6 +147,12 @@ def typecast_one(text, name, emotion="normal", tempo=1.0, pitch=0, intensity=1.2
                 with open(wav, "wb") as f:
                     f.write(data)
                 break
+            except urllib.error.HTTPError as e:
+                if e.code in (401, 402, 403, 429):  # 키·요금제·계정 제한: 이 실행에선 타입캐스트를 끈다
+                    print(f"[타입캐스트 사용 불가 {e.code}] {e.read()[:200]!r}")
+                    _TC_OK = False
+                    return None
+                err = e
             except Exception as e:  # 네트워크 오류는 재시도
                 err = e
         else:
@@ -169,12 +177,108 @@ def typecast(text, role, emotion=None):
     return out
 
 
+# ------------------------------------------------------------------ 일레븐랩스
+
+EL_API = "https://api.elevenlabs.io"
+EL_CAST_FILE = os.path.join(HERE, "eleven_voices.json")  # audition_eleven.py 가 만든다: {배역: [voice_id, ...]}
+EL_TAGS = {"happy": "[excited] ", "toneup": "[excited] ", "sad": "[sad] ", "angry": "[angry] ",
+           "whisper": "[whispers] ", "tonedown": "[nervous] "}
+EL_DEFAULT_EMO = {"nar": "happy", "koko": "happy", "kids": "happy", "villain": "angry", "fan": "angry",
+                  "son": "sad"}
+_EL_OK = None
+
+
+def el_request(path, body=None, method=None):
+    """일레븐랩스 API 호출. 키는 환경 변수 ELEVENLABS_API_KEY 또는 프록시(API credentials)가 붙인다."""
+    import urllib.request
+    headers = {"Content-Type": "application/json"}
+    if os.environ.get("ELEVENLABS_API_KEY"):
+        headers["xi-api-key"] = os.environ["ELEVENLABS_API_KEY"]
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(EL_API + path, data, headers, method=method or ("POST" if data else "GET"))
+    return urllib.request.urlopen(req, timeout=120).read()
+
+
+def eleven_available():
+    global _EL_OK
+    if _EL_OK is None:
+        try:
+            el_request("/v1/user")
+            _EL_OK = True
+        except Exception:
+            _EL_OK = False
+    return _EL_OK
+
+
+def eleven_one(text, voice_id, emotion=None, model="eleven_v3"):
+    tagged = EL_TAGS.get(emotion or "", "") + text if model == "eleven_v3" else text
+    key = hashlib.md5(f"EL|{voice_id}|{model}|{tagged}".encode()).hexdigest()[:16]
+    mp3 = os.path.join(CACHE, f"el_{key}.mp3")
+    if not os.path.exists(mp3) or os.path.getsize(mp3) == 0:
+        if not eleven_available():
+            return None
+        import urllib.error
+        global _EL_OK
+        body = {"text": tagged, "model_id": model, "language_code": "ko",
+                "voice_settings": {"stability": 0.5, "similarity_boost": 0.8}}
+        for attempt in range(3):
+            try:
+                data = el_request(f"/v1/text-to-speech/{voice_id}?output_format=mp3_44100_128", body)
+                os.makedirs(CACHE, exist_ok=True)
+                with open(mp3, "wb") as f:
+                    f.write(data)
+                break
+            except urllib.error.HTTPError as e:
+                msg = e.read()[:300]
+                if e.code == 400 and "language_code" in body:  # 언어 코드를 안 받는 모델이면 빼고 다시
+                    body.pop("language_code")
+                    continue
+                print(f"[일레븐랩스 사용 불가 {e.code}] {msg!r}")
+                if e.code in (401, 402, 403, 429):
+                    _EL_OK = False
+                return None
+            except Exception as e:  # 네트워크 오류는 재시도
+                if attempt == 2:
+                    raise RuntimeError(f"일레븐랩스 실패: {text} ({e})")
+    return _decode(mp3)
+
+
+def eleven(text, role, emotion=None):
+    if not os.path.exists(EL_CAST_FILE):
+        return None
+    ids = json.load(open(EL_CAST_FILE)).get(role)
+    if not ids:
+        return None
+    emo = emotion or EL_DEFAULT_EMO.get(role)
+    parts = [eleven_one(text, v, emo) for v in ids]
+    if any(p is None for p in parts):
+        return None
+    if len(parts) == 1:
+        return parts[0]
+    parts = [trim_silence(p) for p in parts]
+    n = max(len(p) + int(0.02 * SR * i) for i, p in enumerate(parts))
+    out = np.zeros(n, np.float32)
+    for i, p in enumerate(parts):
+        o = int(0.02 * SR * i)
+        out[o:o + len(p)] += p / len(parts) * 1.6
+    return out
+
+
+def char_voice(text, role, emotion=None):
+    """캐릭터 음성: 일레븐랩스 → 타입캐스트 순서로 쓸 수 있는 것. 둘 다 안 되면 None(edge-tts 로)."""
+    if role not in TC_ROLES:
+        return None
+    a = eleven(text, role, emotion)
+    if a is None:
+        a = typecast(text, role, emotion)
+    return a
+
+
 def tts(text, role="nar", trim=True, emotion=None):
     """대사를 합성해 44.1kHz mono float32 배열로 돌려준다(voice_cache 에 캐시)."""
-    if role in TC_ROLES:
-        a = typecast(text, role, emotion)
-        if a is not None:
-            return trim_silence(a) if trim else a
+    a = char_voice(text, role, emotion)
+    if a is not None:
+        return trim_silence(a) if trim else a
     voice, rate, pitch = VOICES[role]
     key = hashlib.md5(f"{voice}|{rate}|{pitch}|{text}".encode()).hexdigest()[:16]
     mp3 = os.path.join(CACHE, f"{role}_{key}.mp3")
@@ -241,13 +345,11 @@ def tts_words(text, role="sing"):
 
 def tts_marks(text, role="nar", emotion=None):
     """대사 음성(앞뒤 무음 제거)과 단어별 [(단어, 시작, 끝)] 초 단위 표시."""
-    if role in TC_ROLES:
-        a = typecast(text, role, emotion)
-        if a is not None:
-            a = trim_silence(a)
-            names, emo, tempo, pitch = CAST[role]
-            key = hashlib.md5(f"M|{names}|{emotion or emo}|{tempo}|{pitch}|{text}".encode()).hexdigest()[:16]
-            return a, word_marks(a, text, key)
+    a = char_voice(text, role, emotion)
+    if a is not None:
+        a = trim_silence(a)
+        key = hashlib.md5(f"M|{role}|{emotion}|{len(a)}|{text}".encode()).hexdigest()[:16]
+        return a, word_marks(a, text, key)
     a, marks = tts_words(text, role)
     env = np.convolve(np.abs(a), np.ones(256) / 256, "same")
     idx = np.where(env > 0.012)[0]
