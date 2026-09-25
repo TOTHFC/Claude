@@ -40,6 +40,15 @@ SFX = {  # 이름: (설명, 길이 초)
     "stamp": ("big rubber stamp thump, comedic impact", 0.6),
     "slide": ("cartoon slide whistle going up", 0.9),
     "shooting_star": ("gentle magical shooting star shimmer across the sky", 1.8),
+    "bee_fly": ("cartoon bee flying around continuously, wiiing buzzing wings, playful, steady loopable buzz", 5.0),
+    "kick": ("soccer ball kick, clean thump, cartoon", 0.5),
+    "bus_drive": ("cute cartoon bus driving up and braking to a stop with a squeak", 2.6),
+    "bus_door": ("cartoon bus door opening with a pneumatic psshh", 1.0),
+    "wings": ("bird wings flapping quickly, cartoon magpie flying", 1.6),
+    "popper": ("party popper confetti pop with a little cheer, cartoon", 1.2),
+    "transition": ("soft sparkly whoosh transition for a kids TV show scene change", 0.8),
+    "march": ("cartoon crowd of villagers marching in, stomping footsteps, comedic", 2.0),
+    "land": ("small cartoon character landing hop, soft thump", 0.5),
 }
 
 BGM = {  # 이름: (설명, 길이 초)

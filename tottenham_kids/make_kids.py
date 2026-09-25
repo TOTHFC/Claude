@@ -22,7 +22,7 @@ from kengine import (AIA, BLACK, CHEEK, FPS, GOLD, GRASS, GRASS2, GRAY, H, INK, 
                      bounce, burst, cloud, confetti, darker, draw_rainbow, drum, ease, ease_out, elastic, fill,
                      heart_path, inst, lighter, linear, mix, oval, poly, pop, radial, rays, rrect, shadow, smooth,
                      sparkle, sparkles, star_path, stroke, sweat, text, text_w, glow, vignette)
-from script import LINES
+from script import LINES, SPOKEN
 from voice import _decode, envelope, tts, tts_marks
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -128,6 +128,7 @@ class Scene:
         self.beds = []
         self.dur = 1.0
         self.cur = 0.0
+        self.loops = []
         self.setup()
 
     def line(self, lid, gap=0.55, t=None, who=None, marks=False):
@@ -144,10 +145,11 @@ class Scene:
     def say(self, t, lid, who=None, marks=False):
         role, txt, *rest = LINES[lid]
         emo = rest[0] if rest else None
+        spoken = SPOKEN.get(lid, txt)  # 자막은 txt, 소리는 spoken
         if marks:
-            a, mk = tts_marks(txt, role, emo)
+            a, mk = tts_marks(spoken, role, emo)
         else:
-            a, mk = tts(txt, role, emotion=emo), None
+            a, mk = tts(spoken, role, emotion=emo), None
         self.lines.append(dict(t=t, id=lid, role=role, who=who or role, a=a, env=envelope(a, FPS), txt=txt,
                                end=t + len(a) / SR, marks=mk))
         return t + len(a) / SR
@@ -157,6 +159,10 @@ class Scene:
 
     def sfx(self, t, name, vol=1.0):
         self.sfxs.append((t, name, vol))
+
+    def sfx_loop(self, t0, t1, name, vol=1.0):
+        """t0~t1 동안 효과음을 이어 붙여 계속 틀기(벌 날갯짓, 밤 귀뚜라미 등)."""
+        self.loops.append((t0, t1, name, vol))
 
     def bed(self, t, arr, vol=1.0):
         """노래처럼 통째로 까는 음원(음악 버스)."""
@@ -181,6 +187,8 @@ class Scene:
             voice.add(t0 + ln["t"], ln["a"], 1.0)
         for t, n, v in self.sfxs:
             fx.add(t0 + t, sfx_audio(n), v)
+        for a_, b_, n, v in self.loops:
+            fx.add(t0 + a_, sfx_loop_audio(n, b_ - a_), v)
         for t, a, v in self.beds:
             music.add(t0 + t, a, v)
 
@@ -437,6 +445,23 @@ def sfx_audio(name):
         a = SYNTH_SFX(name)
     _SND[name] = a.astype(np.float32)
     return _SND[name]
+
+
+def sfx_loop_audio(name, dur, xf=0.3):
+    """효과음을 겹쳐 이어 붙여 dur 초 길이로(앞뒤는 부드럽게)."""
+    a = sfx_audio(name)
+    n, x = int(dur * SR), int(xf * SR)
+    out = a.copy()
+    while len(out) < n:
+        ramp = np.linspace(0, 1, min(x, len(a), len(out)))
+        k = len(ramp)
+        out[-k:] = out[-k:] * (1 - ramp) + a[:k] * ramp
+        out = np.concatenate([out, a[k:]])
+    out = out[:n].copy()
+    f = min(len(out) // 3, int(0.4 * SR))
+    out[:f] *= np.linspace(0, 1, f)
+    out[-f:] *= np.linspace(1, 0, f)
+    return out
 
 
 def bgm_track(name):
@@ -719,7 +744,9 @@ class TitleCard(Scene):
     bgm = ("village", 0.8)
 
     def setup(self):
+        self.sfx(0.1, "boing", 0.6)
         self.sfx(0.15, "twinkle", 0.8)
+        self.sfx(0.8, "slide", 0.4)
         _, e = self.line("title", t=0.7)
         self.dur = e + 1.0
 
@@ -805,22 +832,25 @@ class Summer(Scene):
     bgm = ("village", 0.8)
 
     def setup(self):
-        self.sfx(1.5, "bus_horn", 0.8)
+        self.sfx(0.2, "bus_drive", 0.7)
+        self.sfx(1.9, "bus_horn", 0.7)
         self.line("summer", t=0.6)
         self.t_names, e = self.line("names", gap=0.6, marks=True)
         mk = self.lines[-1]["marks"]
         first = [mk[i][1] for i in range(4)]
         rest0 = mk[3][2] + 0.2
         self.pops = [self.t_names + x for x in first] + [self.t_names + rest0 + i * 0.2 for i in range(5)]
+        self.sfx(self.t_names - 0.45, "bus_door", 0.7)
         for p in self.pops:
             self.sfx(p, "pop", 0.6)
+            self.sfx(p + 0.5, "land", 0.5)
         self.sfx(e, "coins", 0.7)
         self.t_win, e = self.line("win", gap=0.8)
         self.sfx(self.t_win, "fanfare", 0.5)
+        self.sfx(self.t_win + 0.1, "popper", 0.6)
         self.t_kwin, e = self.line("win_koko", gap=0.2)
-        self.t_romero = e + 0.5
-        self.sfx(self.t_romero - 0.4, "plane", 0.8)
-        self.dur = self.t_romero + 3.0
+        self.t_romero = 1e9
+        self.dur = e + 1.2
 
     def cam(self, t):
         if t < self.t_win:
@@ -869,20 +899,7 @@ class Summer(Scene):
                       else 0, mood="happy" if t < self.t_romero else "shock")
             if t < self.t_romero:
                 sparkles(cv, t, 200, 520, 150, 8, seed=4)
-        if t >= self.t_romero - 0.4:
-            k = (t - self.t_romero + 0.4) / 3.4
-            px = 1450 - k * 1750
-            py = 150 + k * 30
-            blob(cv, rrect(px - 90, py - 26, px + 90, py + 26, 26), WHITE, 4, oc=(120, 130, 170))
-            blob(cv, poly([(px - 20, py), (px + 30, py + 60), (px + 50, py)]), (120, 160, 230), 3)
-            blob(cv, poly([(px + 60, py - 10), (px + 110, py - 50), (px + 70, py - 16)]), (120, 160, 230), 3)
-            cv.drawPath(oval(px - 40, py - 4, 16, 14), fill((200, 230, 255)))
-            cv.save()
-            cv.translate(px - 40, py + 8)
-            cv.scale(0.28, 0.28)
-            K.person(cv, "romero", 0, 0, 1.0, mood="smile", arms=(20, 170))
-            cv.restore()
-            caption(cv, "그런데 주장 로메로는 아틀레티코로… 안녕~", px + 60, py - 46, 26, WHITE, (200, 60, 60))
+
 
 
 def stamp(cv, s, x, y, t, t0, col=RED, sc=1.0):
@@ -905,7 +922,6 @@ class Match1(Scene):
     bgm = ("match", 0.75)
 
     def setup(self):
-        self.sfx(1.6, "buzz", 0.7)
         _, e = self.line("m1", t=0.8)
         self.t_bee, e = self.line("bee", gap=0.4, who="bee")
         self.t_h, e = self.line("henshin", gap=0.6)
@@ -917,9 +933,9 @@ class Match1(Scene):
         self.line("back", t=self.t_back + 0.2)
         self.t_pass = self.t_back
         for i in range(3):
-            self.sfx(self.t_pass + 0.2 + i * 0.7, "whoosh", 0.4)
+            self.sfx(self.t_pass + 0.2 + i * 0.7, "kick", 0.8)
         self.t_steal = self.t_back + 2.2
-        self.sfx(self.t_steal, "buzz", 0.6)
+        self.sfx(self.t_steal, "whoosh", 0.7)
         self.line("thanks", t=self.t_steal + 0.1, who="bee")
         self.t_goal = self.t_steal + 1.2
         for i in range(3):
@@ -929,6 +945,10 @@ class Match1(Scene):
         self.cur = self.t_res
         _, e = self.line("m1r", gap=0.3)
         self.dur = e + 1.0
+        # 벌이 화면에 있는 동안 위잉~ 날갯짓 (변신 장면에서는 쉼)
+        self.sfx_loop(1.2, self.t_tr, "bee_fly", 0.5)
+        self.sfx_loop(self.t_back, self.t_res, "bee_fly", 0.45)
+        self.sfx(self.t_tr + 1.25, "twinkle", 0.7)
 
     def cam(self, t):
         if self.t_tr <= t < self.t_back:
@@ -1057,21 +1077,28 @@ class Montage(Scene):
 
     def setup(self):
         self.ta, e = self.line("mont_a", t=0.7)
-        self.sfx(self.ta, "caw", 0.7)
+        self.sfx(self.ta - 0.1, "wings", 0.7)
+        self.sfx(self.ta + 0.3, "caw", 0.6)
         self.sa = e + 0.05
         self.sfx(self.sa, "stamp", 0.8)
         self.tb, e = self.line("mont_b", gap=0.9)
+        self.sfx(self.tb - 0.5, "transition", 0.6)
         for i in range(2):
-            self.sfx(self.tb + 0.5 + i * 0.7, "boing", 0.9)
+            self.sfx(self.tb + 0.1 + i * 0.7, "kick", 0.7)
+            self.sfx(self.tb + 0.55 + i * 0.7, "boing", 0.9)
         self.sb = e + 0.35
         self.sfx(self.sb, "stamp", 0.8)
         self.tc, e = self.line("mont_c", gap=0.9)
+        self.sfx(self.tc - 0.5, "transition", 0.6)
         self.sfx(self.tc + 0.2, "snore", 0.7)
         self.sc = e + 0.05
         self.sfx(self.sc, "stamp", 0.8)
         self.tv, e = self.line("mont2", gap=1.0)
+        self.sfx(self.tv - 0.6, "transition", 0.6)
         self.sfx(self.tv, "roar", 0.7)
         self.g1, self.g2 = self.tv + 1.2, self.tv + 2.1
+        self.sfx(self.g1 - 0.25, "kick", 0.7)
+        self.sfx(self.g2 - 0.25, "kick", 0.7)
         self.sfx(self.g1, "goal_net", 0.7)
         self.sfx(self.g2, "goal_net", 0.7)
         self.t_more, e = self.line("more", gap=0.3)
@@ -1233,6 +1260,7 @@ class Quiz(Scene):
         _, e = self.line("quiz_ans", gap=0.0)
         self.t_yay, e2 = self.line("quiz_yay", gap=0.3)
         self.sfx(self.t_yay, "cheer", 0.8)
+        self.sfx(self.t_yay, "popper", 0.6)
         self.t_awk = e2 + 0.6
         self.sfx(self.t_awk, "crickets", 0.8)
         self.dur = self.t_awk + 1.5
@@ -1299,7 +1327,8 @@ class Angry(Scene):
     XS = (170, 390, 890, 1110)
 
     def setup(self):
-        self.sfx(0.3, "crowd_angry", 0.8)
+        self.sfx(0.05, "march", 0.7)
+        self.sfx(0.6, "crowd_angry", 0.6)
         self.turns = []
         for lid, role, seat, gap in (("fans1", "fan", 0, None), ("fans2", "fan3", 1, 0.25), ("fans3", "fan2", 2, 0.25)):
             st, e = self.line(lid, t=1.3 if gap is None else None, gap=gap or 0.0)
@@ -1366,6 +1395,7 @@ class Night(Scene):
         self.t_dz, e = self.line("dz_wish", t=self.t_star + 1.0)
         self.sfx(e + 0.1, "twinkle", 0.7)
         self.dur = e + 1.3
+        self.sfx_loop(0.0, self.dur, "crickets", 0.22)
 
     def cam(self, t):
         if t < self.t_koko:
@@ -1421,7 +1451,8 @@ class Lesson(Scene):
         self.sfx(0.1, "chime", 0.9)
         self.t_l, e = self.line("lesson", t=0.9, marks=True)
         mk = self.lines[-1]["marks"]
-        self.t_l2 = self.t_l + next(m[1] for m in mk if m[0].startswith("잘"))
+        self.t_l2 = self.t_l + next(m[1] for m in mk if m[0].startswith("재미"))
+        self.sfx(self.t_l2, "pop", 0.6)
         self.t_kids, e = self.line("lesson_kids", gap=0.6)
         self.sfx(self.t_kids, "cheer", 0.5)
         self.dur = e + 1.3
@@ -1454,7 +1485,7 @@ class Lesson(Scene):
             cv.save()
             cv.translate(640, 400)
             cv.scale(k2, k2)
-            text(cv, "잘 노는 건 아니에요!", 0, 0, 72, RED, TF_TITLE, align="center", outline=WHITE, ow=12)
+            text(cv, "재미있게 놀 수는 없어요!", 0, 0, 72, RED, TF_TITLE, align="center", outline=WHITE, ow=12)
             cv.restore()
         # 친구들이 손잡고 한 팀
         for i, key in enumerate(("fernandes", "tonali", "dezerbi", "vdv", "gallagher")):
@@ -1592,6 +1623,8 @@ def mix_audio(scenes, starts, total):
     prev, off = None, 0.0
     for i, (s, st) in enumerate(zip(scenes, starts)):
         s.audio(voice, fx, music, st)
+        if s.fade and i > 0:
+            fx.add(st, sfx_audio("transition"), 0.45)
         if not s.bgm:
             prev, off = None, 0.0
             continue
