@@ -15,7 +15,7 @@ KIDS = os.path.join(HERE, "..", "tottenham_kids")
 sys.path.insert(0, KIDS)
 import voice as V  # noqa: E402
 
-from story import LINES, NAMES, SCENES, VOICES  # noqa: E402
+from story import GAP, LINES, NAMES, POPS, SCENES, TEMPO, VOICES  # noqa: E402
 
 V.CACHE = os.path.join(HERE, "voice_cache")
 SR = V.SR
@@ -40,9 +40,17 @@ SFX = {  # 이름: (설명, 길이 초)
     "screech": ("cartoon brake screech, sudden stop", 0.8),
     "paper": ("newspaper spinning in and landing, old movie newspaper headline effect", 1.2),
     "sigh": ("tired disappointed crowd sigh, comedic", 1.2),
+    "boom": ("deep cinematic meme bass boom hit, huge low impact with short reverb tail", 1.6),
+    "dun": ("dramatic suspense sting dun dun duuun, orchestral, comedic meme", 1.4),
+    "rewind": ("VHS tape rewinding sound, fast whirring with pitch-shifted squeaky reversed audio", 1.6),
+    "whip": ("very fast whip pan whoosh transition, airy and punchy", 0.5),
+    "swish": ("short snappy cartoon text pop swoosh with a light click", 0.5),
+    "slam": ("door slamming shut hard, cartoon", 0.7),
 }
 REUSE = ["whoosh", "boing", "stamp", "coins", "pop", "crickets", "popper", "tick", "sad_trombone", "chime"]
 BGM = {
+    "hype": ("Energetic funny meme background music for a fast YouTube explainer, instrumental, bouncy synth bass, "
+             "punchy drums, playful pizzicato and brass stabs, 124 bpm, high energy, no vocals", 100),
     "sneaky": ("Comedic sneaky heist background music for a 3D animated explainer, instrumental, pizzicato strings, "
                "muted trumpet, walking upright bass, brushed snare, playful mischief, 110 bpm, no vocals", 75),
     "news": ("Retro newsreel documentary background music, instrumental, brisk strings, snare rolls, light brass, "
@@ -86,8 +94,21 @@ def gen_voices():
         if a is None:
             raise SystemExit(f"voice failed: {lid}")
         a = V.trim_silence(a.astype(np.float32), 0.01, 0.03)
-        out[lid] = a
+        out[lid] = stretch(a, TEMPO)
     return out
+
+
+def stretch(a, k):
+    """음높이를 유지한 채 k 배 빠르게(ffmpeg atempo)."""
+    if abs(k - 1) < 1e-3:
+        return a
+    import subprocess
+    import imageio_ffmpeg
+    ff = imageio_ffmpeg.get_ffmpeg_exe()
+    p = subprocess.run([ff, "-v", "error", "-f", "f32le", "-ar", str(SR), "-ac", "1", "-i", "-", "-af", f"atempo={k}",
+                        "-f", "f32le", "-ar", str(SR), "-ac", "1", "-"], input=a.astype(np.float32).tobytes(),
+                       capture_output=True, check=True)
+    return np.frombuffer(p.stdout, np.float32).copy()
 
 
 def env30(a):
@@ -109,7 +130,7 @@ def build_timeline(audio):
             if k == "wait":
                 cur += ev[1]
             elif k == "say":
-                gap = ev[2] if len(ev) > 2 else 0.35
+                gap = ev[2] if len(ev) > 2 else GAP
                 st = cur + gap
                 d = len(audio[ev[1]]) / SR
                 spk, sub, _ = LINES[ev[1]]
@@ -129,40 +150,45 @@ def build_timeline(audio):
 
 
 def auto_sfx(tl):
-    """애니메이션에 딸린 효과음(장면 전환, 도장, 달력 넘김 등)."""
+    """애니메이션에 딸린 효과음(장면 전환, 도장, 달력 넘김 등)과 큰 글자."""
     m, out = tl["marks"], []
     for sc in tl["scenes"][1:]:
-        out.append((sc["start"] - 0.25, "whoosh", 0.5))
+        out.append((sc["start"] - 0.22, "whip", 0.7))
+    out += [(m["rewind"], "rewind", 0.9), (m["drop"] - 0.35, "whoosh", 0.6), (m["drop"] + 0.2, "thud", 1.0)]
     for i in range(5):
-        out.append((m["buy"] + 0.3 + i * 0.45, "pop", 0.5))
+        out.append((m["buy"] + 0.25 + i * 0.4, "pop", 0.5))
     for k in ("sign1", "sign2", "sign3"):
         out.append((m[k], "pop", 0.6))
     out += [(m["walk"], "tiptoe", 0.7), (m["hop"], "boing", 0.5), (m["land"], "coins", 0.7),
-            (m["balance"], "creak", 0.6), (m["stamp54"], "stamp", 0.9), (m["env1"], "pop", 0.6),
-            (m["pipe"], "pipe", 0.7), (m["pipe"] + 0.75, "bonk", 0.8)]
+            (m["balance"], "creak", 0.6), (m["stamp54"], "stamp", 1.0), (m["env1"], "pop", 0.6),
+            (m["pipe"], "pipe", 0.8), (m["pipe"] + 0.75, "bonk", 0.9)]
     for k in ("st14", "st5", "st7"):
-        out.append((m[k], "stamp", 0.9))
-    out.append((m["knock"], "knock", 0.9))
+        out.append((m[k], "stamp", 1.0))
+    out += [(m["knock"], "knock", 0.9), (m["slam"], "slam", 0.9)]
     t = m["years"]
     while t < m["yearsend"]:
         out.append((t, "flip", 0.45))
-        t += 0.32
+        t += 0.22
     for k in ("p2018", "p2020", "p2023", "p2024"):
         out.append((m[k], "pop", 0.6))
-    out += [(m["p2018"] + 0.1, "paper", 0.6), (m["cas"], "stamp", 0.8), (m["snail"] + 0.4, "crickets", 0.6)]
-    # 114번 도장: 점점 빨라진다
-    t, n, dt = m["stamps"], 0, 0.22
+    out += [(m["p2018"] + 0.1, "paper", 0.6), (m["cas"], "stamp", 0.8), (m["snail"] + 0.3, "crickets", 0.6)]
+    t, n, dt = m["stamps"], 0, 0.2
     while n < 24:
         out.append((t, "stamp", 0.45))
         t += dt
-        dt = max(0.06, dt * 0.88)
+        dt = max(0.055, dt * 0.87)
         n += 1
-    m["stampend"] = round(max(m["stampend"], t + 0.2), 3)
-    out += [(m["stampend"], "tick", 0.5), (m["cheer"], "popper", 0.7), (m["spin"], "wheel", 0.7),
-            (m["spin"] + 3.6, "wheel", 0.6), (m["spin"] + 7.2, "wheel", 0.6), (m["spin"] + 10.8, "wheel", 0.45), (m["spin"] + 14.4, "wheel", 0.35), (m["grab"], "screech", 0.8),
-            (m["end"], "chime", 0.5)]
-    wheel_until = m["grab"]
-    return out, wheel_until
+    m["stampend"] = round(max(m["stampend"], t + 0.15), 3)
+    out += [(m["cheer"], "popper", 0.7), (m["grab"], "screech", 0.8), (m["end"], "chime", 0.5)]
+    for k in range(6):
+        out.append((m["spin"] + k * 3.6, "wheel", 0.7 - k * 0.07))
+    pops = []
+    for mk, d, txt, col in POPS:
+        tt = round(m[mk] + d, 3)
+        pops.append({"t": tt, "text": txt, "color": col})
+        out.append((tt, "swish", 0.6))
+    tl["pops"] = pops
+    return out, m["grab"]
 
 
 def decode(path):
@@ -246,8 +272,8 @@ def mix(tl, audio, sfx, wheel_until):
     for i in range(len(g)):
         f = g[i] if g[i] < f else min(g[i], f + 1 / 50)
         g[i] = f
-    gain = np.repeat(1.0 - 0.5 * (1.0 - g), hop)[:n]
-    out = voice + fx * 0.5 + music * gain
+    gain = np.repeat(1.0 - 0.42 * (1.0 - g), hop)[:n]
+    out = voice + fx * 0.55 + music * gain * 1.25
     out = np.tanh(out * 1.1) / np.tanh(1.1)
     return (out / (np.abs(out).max() + 1e-9) * 0.89)[: int(total * SR)]
 

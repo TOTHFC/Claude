@@ -26,7 +26,16 @@ async function open() {
 const grab = async (p, t, fmt) => Buffer.from((await p.evaluate(([t, f]) => window.renderAt(t, f), [t, fmt])).split(',')[1], 'base64');
 
 const mode = process.argv[2];
-if (mode === 'preview') {
+if (mode === 'check') {
+  const { b, p } = await open();
+  const total = await p.evaluate(() => window.TOTAL);
+  const res = await p.evaluate((total) => { const r = []; for (let t = 0; t < total; t += 0.2) r.push(...window.checkOverlaps(t)); return r; }, total);
+  const seen = {};
+  for (const s of res) { const [sc, t, pair, d] = s.split(' '); const k = sc + ' ' + pair; (seen[k] ||= []).push(`${t}(${d})`); }
+  for (const [k, v] of Object.entries(seen)) console.log(k, v.length, v.slice(0, 6).join(' '));
+  console.log('checked', res.length, 'hits');
+  await b.close();
+} else if (mode === 'preview') {
   const dir = process.argv[3];
   fs.mkdirSync(dir, { recursive: true });
   const { b, p } = await open();
